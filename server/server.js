@@ -36,6 +36,7 @@ app.use(
     origin: function (origin, callback) {
       console.log("CORS request from origin:", origin);
       console.log("Allowed origins:", [
+        "*",
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
