@@ -33,45 +33,6 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 // =========================
 app.use(
   cors({
-    origin: function (origin, callback) {
-      console.log("CORS request from origin:", origin);
-      console.log("Allowed origins:", [
-        "*",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5177",
-        "http://localhost:5178",
-        "https://lms-rho-swart.vercel.app",
-      ]);
-
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-
-      const allowedOrigins = [
-        "*",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5177",
-        "http://localhost:5178",
-        "https://lms-rho-swart.vercel.app",
-      ];
-
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        console.log("CORS BLOCKED: Origin not allowed:", origin);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
-app.use(
-  cors({
     origin: [
       "*",
       "http://localhost:3000",
@@ -80,6 +41,7 @@ app.use(
       "http://localhost:5177",
       "http://localhost:5178",
       "https://lms-rho-swart.vercel.app",
+      "https://lms-frontend-omega-sepia.vercel.app",
     ],
     methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
