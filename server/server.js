@@ -42,6 +42,7 @@ app.use(
       "http://localhost:5178",
       "https://lms-rho-swart.vercel.app",
       "https://lms-frontend-omega-sepia.vercel.app",
+      "https://lms-frontend-lobm3ytwu-jawaadhossain42-9416s-projects.vercel.app",
     ],
     methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
