@@ -48,6 +48,7 @@ app.use(
       if (!origin) return callback(null, true);
 
       const allowedOrigins = [
+        "*",
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
@@ -71,6 +72,7 @@ app.use(
 app.use(
   cors({
     origin: [
+      "*",
       "http://localhost:3000",
       "http://localhost:5173",
       "http://localhost:5174",
