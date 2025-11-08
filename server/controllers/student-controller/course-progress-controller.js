@@ -23,7 +23,7 @@ const checkRequiredQuizzesCompleted = async (progress, courseId) => {
 //mark current lecture as viewed
 const markCurrentLectureAsViewed = async (req, res) => {
   try {
-    const { userId, courseId, lectureId } = req.body;
+    const { userId, courseId, lectureId, isRewatch } = req.body;
 
     let progress = await CourseProgress.findOne({ userId, courseId });
     if (!progress) {
@@ -35,23 +35,29 @@ const markCurrentLectureAsViewed = async (req, res) => {
             lectureId,
             viewed: true,
             dateViewed: new Date(),
+            rewatchCount: isRewatch ? 1 : 0,
           },
         ],
       });
       await progress.save();
     } else {
       const lectureProgress = progress.lecturesProgress.find(
-        (item) => item.lectureId === lectureId
+        (item) => item.lectureId.toString() === lectureId
       );
 
       if (lectureProgress) {
         lectureProgress.viewed = true;
         lectureProgress.dateViewed = new Date();
+        if (isRewatch) {
+          lectureProgress.rewatchCount =
+            (lectureProgress.rewatchCount || 0) + 1;
+        }
       } else {
         progress.lecturesProgress.push({
           lectureId,
           viewed: true,
           dateViewed: new Date(),
+          rewatchCount: isRewatch ? 1 : 0,
         });
       }
       await progress.save();
@@ -66,27 +72,32 @@ const markCurrentLectureAsViewed = async (req, res) => {
       });
     }
 
-    //check all the lectures are viewed and all required quizzes (final quizzes) are passed
-    const allLecturesViewed =
-      progress.lecturesProgress.length === course.curriculum.length &&
-      progress.lecturesProgress.every((item) => item.viewed);
+    // Only update completion status if not already completed and not a rewatch
+    if (!progress.completed && !isRewatch) {
+      //check all the lectures are viewed and all required quizzes (final quizzes) are passed
+      const allLecturesViewed =
+        progress.lecturesProgress.length === course.curriculum.length &&
+        progress.lecturesProgress.every((item) => item.viewed);
 
-    // Check if all required quizzes (final quizzes) are passed
-    const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
-      progress,
-      courseId
-    );
+      // Check if all required quizzes (final quizzes) are passed
+      const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
+        progress,
+        courseId
+      );
 
-    if (allLecturesViewed && allRequiredQuizzesPassed) {
-      progress.completed = true;
-      progress.completionDate = new Date();
+      if (allLecturesViewed && allRequiredQuizzesPassed) {
+        progress.completed = true;
+        progress.completionDate = new Date();
 
-      await progress.save();
+        await progress.save();
+      }
     }
 
     res.status(200).json({
       success: true,
-      message: "Lecture marked as viewed",
+      message: isRewatch
+        ? "Lecture rewatch counted"
+        : "Lecture marked as viewed",
       data: progress,
     });
   } catch (error) {

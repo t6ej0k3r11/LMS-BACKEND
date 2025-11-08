@@ -35,7 +35,6 @@ const UserSchema = new mongoose.Schema({
 
 // Add indexes for frequently queried fields
 UserSchema.index({ role: 1 });
-UserSchema.index({ userName: 1 });
 
 // Pre-save middleware to hash password
 UserSchema.pre("save", async function (next) {

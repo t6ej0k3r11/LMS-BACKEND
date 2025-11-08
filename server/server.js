@@ -31,19 +31,32 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 // =========================
 // 🧩 Middleware
 // =========================
+// Safer CORS handling: when credentials are used, Access-Control-Allow-Origin
+// must not be '*'. Use a whitelist and echo back the request origin when allowed.
+const allowedOrigins = new Set([
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5177",
+  "http://localhost:5178",
+  "https://lms-rho-swart.vercel.app",
+  "https://lms-frontend-omega-sepia.vercel.app",
+  "https://lms-frontend-lobm3ytwu-jawaadhossain42-9416s-projects.vercel.app",
+]);
+
 app.use(
   cors({
-    origin: [
-      "*",
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:5177",
-      "http://localhost:5178",
-      "https://lms-rho-swart.vercel.app",
-      "https://lms-frontend-omega-sepia.vercel.app",
-      "https://lms-frontend-lobm3ytwu-jawaadhossain42-9416s-projects.vercel.app",
-    ],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g., curl, mobile apps, same-origin)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.has(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("CORS: origin not allowed ->", origin);
+      return callback(new Error("Not allowed by CORS"), false);
+    },
     methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -51,6 +64,21 @@ app.use(
 );
 
 app.use(express.json());
+
+// Simple request logger to help debug routes (including quiz player requests)
+app.use((req, res, next) => {
+  try {
+    console.log(
+      `[REQ] ${req.method} ${req.originalUrl} - headers: ${JSON.stringify({
+        authorization: req.headers.authorization,
+        referer: req.headers.referer,
+      })}`
+    );
+  } catch (err) {
+    // ignore logging errors
+  }
+  next();
+});
 
 // =========================
 // 🗄️ Database Connection

@@ -7,6 +7,10 @@ const LectureProgressSchema = new mongoose.Schema({
   },
   viewed: Boolean,
   dateViewed: Date,
+  rewatchCount: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const QuizProgressSchema = new mongoose.Schema({
