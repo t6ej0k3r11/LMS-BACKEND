@@ -20,6 +20,22 @@ const checkRequiredQuizzesCompleted = async (progress, courseId) => {
   return allFinalQuizzesPassed;
 };
 
+// Helper function to update progress percentage
+const updateProgressPercentage = async (progress, courseId) => {
+  const course = await Course.findById(courseId);
+  if (!course) return;
+
+  const totalLectures = course.curriculum.length;
+  const allQuizzes = await Quiz.find({ courseId, isActive: true });
+  const totalQuizzes = allQuizzes.length;
+
+  progress.progressPercentage = progress.calculateProgressPercentage(
+    totalLectures,
+    totalQuizzes
+  );
+  await progress.save();
+};
+
 //mark current lecture as viewed
 const markCurrentLectureAsViewed = async (req, res) => {
   try {
@@ -36,6 +52,8 @@ const markCurrentLectureAsViewed = async (req, res) => {
             viewed: true,
             dateViewed: new Date(),
             rewatchCount: isRewatch ? 1 : 0,
+            progressValue: 1,
+            lastWatchedAt: new Date(),
           },
         ],
       });
@@ -48,6 +66,8 @@ const markCurrentLectureAsViewed = async (req, res) => {
       if (lectureProgress) {
         lectureProgress.viewed = true;
         lectureProgress.dateViewed = new Date();
+        lectureProgress.progressValue = 1;
+        lectureProgress.lastWatchedAt = new Date();
         if (isRewatch) {
           lectureProgress.rewatchCount =
             (lectureProgress.rewatchCount || 0) + 1;
@@ -58,6 +78,8 @@ const markCurrentLectureAsViewed = async (req, res) => {
           viewed: true,
           dateViewed: new Date(),
           rewatchCount: isRewatch ? 1 : 0,
+          progressValue: 1,
+          lastWatchedAt: new Date(),
         });
       }
       await progress.save();
@@ -72,12 +94,13 @@ const markCurrentLectureAsViewed = async (req, res) => {
       });
     }
 
+    // Update progress percentage
+    await updateProgressPercentage(progress, courseId);
+
     // Only update completion status if not already completed and not a rewatch
     if (!progress.completed && !isRewatch) {
-      //check all the lectures are viewed and all required quizzes (final quizzes) are passed
-      const allLecturesViewed =
-        progress.lecturesProgress.length === course.curriculum.length &&
-        progress.lecturesProgress.every((item) => item.viewed);
+      // Check if all lectures are fully completed (100% watched)
+      const allLecturesCompleted = progress.areAllLecturesCompleted();
 
       // Check if all required quizzes (final quizzes) are passed
       const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
@@ -85,10 +108,9 @@ const markCurrentLectureAsViewed = async (req, res) => {
         courseId
       );
 
-      if (allLecturesViewed && allRequiredQuizzesPassed) {
+      if (allLecturesCompleted && allRequiredQuizzesPassed) {
         progress.completed = true;
         progress.completionDate = new Date();
-
         await progress.save();
       }
     }
@@ -168,6 +190,7 @@ const getCurrentCourseProgress = async (req, res) => {
         quizzesProgress: currentUserCourseProgress.quizzesProgress || [],
         completed: currentUserCourseProgress.completed,
         completionDate: currentUserCourseProgress.completionDate,
+        progressPercentage: currentUserCourseProgress.progressPercentage || 0,
         isPurchased: true,
       },
     });
@@ -222,6 +245,9 @@ const updateQuizProgress = async (req, res) => {
 
     await progress.save();
 
+    // Update progress percentage
+    await updateProgressPercentage(progress, courseId);
+
     // Check if course is now complete
     const course = await Course.findById(courseId);
     if (!course) {
@@ -231,13 +257,8 @@ const updateQuizProgress = async (req, res) => {
       });
     }
 
-    // Get all quizzes for the course
-    const allQuizzes = await Quiz.find({ courseId, isActive: true });
-
-    // Check if all lectures are viewed
-    const allLecturesViewed =
-      progress.lecturesProgress.length === course.curriculum.length &&
-      progress.lecturesProgress.every((item) => item.viewed);
+    // Check if all lectures are fully completed (100% watched)
+    const allLecturesCompleted = progress.areAllLecturesCompleted();
 
     // Check if all required quizzes (final quizzes) are passed
     const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
@@ -245,7 +266,11 @@ const updateQuizProgress = async (req, res) => {
       courseId
     );
 
-    if (allLecturesViewed && allRequiredQuizzesPassed && !progress.completed) {
+    if (
+      allLecturesCompleted &&
+      allRequiredQuizzesPassed &&
+      !progress.completed
+    ) {
       progress.completed = true;
       progress.completionDate = new Date();
       await progress.save();
@@ -299,9 +324,70 @@ const resetCurrentCourseProgress = async (req, res) => {
   }
 };
 
+//update lecture progress (for real-time progress tracking)
+const updateLectureProgress = async (req, res) => {
+  try {
+    const { userId, courseId, lectureId, progressValue } = req.body;
+
+    let progress = await CourseProgress.findOne({ userId, courseId });
+    if (!progress) {
+      progress = new CourseProgress({
+        userId,
+        courseId,
+        lecturesProgress: [
+          {
+            lectureId,
+            viewed: false,
+            progressValue: progressValue || 0,
+            lastWatchedAt: new Date(),
+          },
+        ],
+      });
+      await progress.save();
+    } else {
+      const lectureProgress = progress.lecturesProgress.find(
+        (item) => item.lectureId.toString() === lectureId
+      );
+
+      if (lectureProgress) {
+        lectureProgress.progressValue = progressValue || 0;
+        lectureProgress.lastWatchedAt = new Date();
+        // Mark as viewed only when progress reaches 100%
+        if (progressValue >= 1 && !lectureProgress.viewed) {
+          lectureProgress.viewed = true;
+          lectureProgress.dateViewed = new Date();
+        }
+      } else {
+        progress.lecturesProgress.push({
+          lectureId,
+          viewed: false,
+          progressValue: progressValue || 0,
+          lastWatchedAt: new Date(),
+        });
+      }
+      await progress.save();
+    }
+
+    // Update progress percentage
+    await updateProgressPercentage(progress, courseId);
+
+    res.status(200).json({
+      success: true,
+      message: "Lecture progress updated",
+      data: progress,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Some error occured!",
+    });
+  }
+};
+
 module.exports = {
   markCurrentLectureAsViewed,
   getCurrentCourseProgress,
   resetCurrentCourseProgress,
   updateQuizProgress,
+  updateLectureProgress,
 };

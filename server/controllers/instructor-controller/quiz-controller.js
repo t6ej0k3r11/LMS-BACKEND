@@ -19,6 +19,101 @@ const createQuiz = async (req, res) => {
     } = req.body;
     const instructorId = req.user._id; // Get user ID from JWT payload
 
+    // Validate required fields
+    if (
+      !courseId ||
+      !title ||
+      !quizType ||
+      !questions ||
+      questions.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing required fields: courseId, title, quizType, or questions",
+      });
+    }
+
+    // Validate quiz type
+    if (!["lesson", "final"].includes(quizType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz type. Must be 'lesson' or 'final'",
+      });
+    }
+
+    // Validate lecture ID for lesson quizzes
+    if (quizType === "lesson" && !lectureId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lecture ID is required for lesson quizzes",
+      });
+    }
+
+    // Validate questions
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.question || !q.type) {
+        return res.status(400).json({
+          success: false,
+          message: `Question ${i + 1} is missing required fields`,
+        });
+      }
+
+      // Validate question types
+      if (
+        ![
+          "multiple-choice",
+          "true-false",
+          "broad-text",
+          "short-answer",
+          "essay",
+        ].includes(q.type)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Question ${
+            i + 1
+          } has invalid type. Must be 'multiple-choice', 'true-false', 'broad-text', 'short-answer', or 'essay'`,
+        });
+      }
+
+      // Validate options for multiple choice
+      if (q.type === "multiple-choice") {
+        if (!q.options || q.options.length < 2) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${i + 1} must have at least 2 options`,
+          });
+        }
+        if (!q.correctAnswer) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${i + 1} must have a correct answer`,
+          });
+        }
+      }
+
+      // Validate correct answer for true-false
+      if (
+        q.type === "true-false" &&
+        !["true", "false"].includes(q.correctAnswer)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Question ${i + 1} correct answer must be 'true' or 'false'`,
+        });
+      }
+
+      // Validate points for all question types
+      if (!q.points || q.points < 1) {
+        return res.status(400).json({
+          success: false,
+          message: `Question ${i + 1} must have at least 1 point`,
+        });
+      }
+    }
+
     const newQuiz = new Quiz({
       courseId,
       lectureId: quizType === "lesson" ? lectureId : null,
@@ -26,9 +121,9 @@ const createQuiz = async (req, res) => {
       title,
       description,
       questions,
-      passingScore,
+      passingScore: passingScore || 70,
       timeLimit,
-      attemptsAllowed,
+      attemptsAllowed: attemptsAllowed || 1,
       createdBy: instructorId,
     });
 

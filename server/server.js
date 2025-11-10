@@ -31,54 +31,37 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 // =========================
 // 🧩 Middleware
 // =========================
-// Safer CORS handling: when credentials are used, Access-Control-Allow-Origin
-// must not be '*'. Use a whitelist and echo back the request origin when allowed.
-const allowedOrigins = new Set([
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5177",
-  "http://localhost:5178",
-  "https://lms-rho-swart.vercel.app",
-  "https://lms-frontend-omega-sepia.vercel.app",
-  "https://lms-frontend-lobm3ytwu-jawaadhossain42-9416s-projects.vercel.app",
-]);
-
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g., curl, mobile apps, same-origin)
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.has(origin)) {
-        return callback(null, true);
-      }
+      const allowedOrigins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5177",
+        "http://localhost:5178",
+        "https://lms-rho-swart.vercel.app",
+        "https://lms-frontend-omega-sepia.vercel.app",
+        "https://lms-frontend-lobm3ytwu-jawaadhossain42-9416s-projects.vercel.app",
+      ];
 
-      console.warn("CORS: origin not allowed ->", origin);
-      return callback(new Error("Not allowed by CORS"), false);
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
     },
-    methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
+    optionsSuccessStatus: 200, // Some legacy browsers choke on 204
   })
 );
 
 app.use(express.json());
-
-// Simple request logger to help debug routes (including quiz player requests)
-app.use((req, res, next) => {
-  try {
-    console.log(
-      `[REQ] ${req.method} ${req.originalUrl} - headers: ${JSON.stringify({
-        authorization: req.headers.authorization,
-        referer: req.headers.referer,
-      })}`
-    );
-  } catch (err) {
-    // ignore logging errors
-  }
-  next();
-});
 
 // =========================
 // 🗄️ Database Connection

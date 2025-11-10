@@ -43,6 +43,14 @@ const getQuizzesByCourse = async (req, res) => {
       });
     }
 
+    // Get course progress to check lecture completion
+    const courseProgress = await require("../../models/CourseProgress").findOne(
+      {
+        userId: studentId,
+        courseId: courseId,
+      }
+    );
+
     // Get quizzes for the course with populated attempts using aggregation to avoid N+1
     const quizzesWithAttempts = await Quiz.aggregate([
       {
@@ -91,9 +99,22 @@ const getQuizzesByCourse = async (req, res) => {
       },
     ]);
 
+    // Filter quizzes based on prerequisites
+    const availableQuizzes = quizzesWithAttempts.filter((quiz) => {
+      if (!quiz.lectureId) {
+        // Final quiz - always available after enrollment
+        return true;
+      } else {
+        // Lesson quiz - check if corresponding lecture is completed
+        return (
+          courseProgress && courseProgress.isLectureCompleted(quiz.lectureId)
+        );
+      }
+    });
+
     res.status(200).json({
       success: true,
-      data: quizzesWithAttempts,
+      data: availableQuizzes,
     });
   } catch (e) {
     console.error("Error submitting quiz attempt:", e);
@@ -146,26 +167,27 @@ const getQuizById = async (req, res) => {
       });
     }
 
-    // Check prerequisites for lesson quizzes
+    // Check prerequisites for quiz access
     if (quiz.lectureId) {
-      const courseProgress = await CourseProgress.findOne({
-        userId: studentId,
-        courseId: quiz.courseId,
-      });
+      // Lesson quiz - check if corresponding lecture is completed
+      const courseProgress =
+        await require("../../models/CourseProgress").findOne({
+          userId: studentId,
+          courseId: quiz.courseId,
+        });
 
-      const completedLectureIds = courseProgress
-        ? courseProgress.lecturesProgress
-            .filter((lecture) => lecture.viewed)
-            .map((lecture) => lecture.lectureId)
-        : [];
-
-      if (!completedLectureIds.includes(quiz.lectureId.toString())) {
+      if (
+        !courseProgress ||
+        !courseProgress.isLectureCompleted(quiz.lectureId)
+      ) {
         return res.status(403).json({
           success: false,
-          message: "Prerequisites not met. Complete the lecture first.",
+          message:
+            "You must complete the corresponding lecture before attempting this quiz.",
         });
       }
     }
+    // Final quiz - no prerequisites required beyond course enrollment
 
     // Get existing attempts for this student and quiz
     const attempts = await QuizAttempt.find({
@@ -258,39 +280,36 @@ const startQuizAttempt = async (req, res) => {
       });
     }
 
-    // Check prerequisites
+    // Check prerequisites for quiz access
     if (quiz.lectureId) {
-      const courseProgress = await CourseProgress.findOne({
-        userId: studentId,
-        courseId: quiz.courseId,
-      });
+      // Lesson quiz - check if corresponding lecture is completed
+      const courseProgress =
+        await require("../../models/CourseProgress").findOne({
+          userId: studentId,
+          courseId: quiz.courseId,
+        });
 
-      const completedLectureIds = courseProgress
-        ? courseProgress.lecturesProgress
-            .filter((lecture) => lecture.viewed)
-            .map((lecture) => lecture.lectureId)
-        : [];
-
-      if (!completedLectureIds.includes(quiz.lectureId.toString())) {
+      if (
+        !courseProgress ||
+        !courseProgress.isLectureCompleted(quiz.lectureId)
+      ) {
         return res.status(403).json({
           success: false,
-          message: "Prerequisites not met. Complete the lecture first.",
+          message:
+            "You must complete the corresponding lecture before attempting this quiz.",
         });
       }
     }
+    // Final quiz - no prerequisites required beyond course enrollment
 
-    // Check attempt limits
+    // Allow unlimited attempts for all quizzes - students can take quizzes as many times as they want
+    // Always create a new attempt, even if there are active ones
+
+    // Get existing attempts count
     const existingAttempts = await QuizAttempt.countDocuments({
       quizId,
       studentId,
     });
-
-    if (existingAttempts >= quiz.attemptsAllowed) {
-      return res.status(403).json({
-        success: false,
-        message: "Maximum attempts reached.",
-      });
-    }
 
     const attemptNumber = existingAttempts + 1;
     const startedAt = new Date();
@@ -320,6 +339,7 @@ const startQuizAttempt = async (req, res) => {
         attemptNumber,
         startedAt,
         timeLimit: quiz.timeLimit,
+        isExistingAttempt: false,
       },
     });
   } catch (e) {
@@ -470,18 +490,7 @@ const submitQuizAttempt = async (req, res) => {
       quiz.timeLimit
     );
 
-    // Check time limit
-    if (quiz.timeLimit && timeSpent > quiz.timeLimit * 60) {
-      console.log(
-        "🔍 DEBUG: Time limit exceeded - resetting status to in_progress"
-      );
-      // Reset status if time limit exceeded
-      await QuizAttempt.findByIdAndUpdate(attemptId, { status: "in_progress" });
-      return res.status(400).json({
-        success: false,
-        message: "Time limit exceeded.",
-      });
-    }
+    // No time limit enforcement - students can take quizzes at their own pace
 
     // Calculate score
     console.log(
@@ -507,13 +516,13 @@ const submitQuizAttempt = async (req, res) => {
         let points = 0;
 
         if (question.type === "broad-text") {
-          // Broad text questions need manual review
+          // Broad text questions need manual review - no points until reviewed
           isCorrect = null;
-          points = 0; // Will be assigned after review
+          points = 0;
         } else {
           // Automatic marking for multiple choice, true-false, etc.
           isCorrect = question.correctAnswer === answer.answer;
-          points = isCorrect ? question.points : 0;
+          points = isCorrect ? question.points || 1 : 0;
           pointsEarned += points;
           console.log(
             "🔍 DEBUG: Question marked - type:",
@@ -563,7 +572,9 @@ const submitQuizAttempt = async (req, res) => {
       totalAutoGradablePoints > 0
         ? Math.round((pointsEarned / totalAutoGradablePoints) * 100)
         : 0;
-    const passed = hasUnreviewedQuestions ? false : score >= quiz.passingScore;
+    // For final quiz, require 80% minimum score
+    const requiredScore = quiz.quizType === "final" ? 80 : quiz.passingScore;
+    const passed = hasUnreviewedQuestions ? false : score >= requiredScore;
 
     console.log(
       "🔍 DEBUG: Final results - hasUnreviewedQuestions:",
@@ -709,13 +720,18 @@ const getQuizResults = async (req, res) => {
       });
     }
 
+    // For final quiz, show required score
+    const requiredScore = quiz.quizType === "final" ? 80 : quiz.passingScore;
+    const maxAttempts = quiz.quizType === "final" ? 2 : quiz.attemptsAllowed;
+
     res.status(200).json({
       success: true,
       data: {
         quiz: {
           title: quiz.title,
-          passingScore: quiz.passingScore,
-          attemptsAllowed: quiz.attemptsAllowed,
+          passingScore: requiredScore,
+          attemptsAllowed: maxAttempts,
+          quizType: quiz.quizType,
         },
         score: latestAttempt?.score || 0,
         passed: latestAttempt?.passed || false,

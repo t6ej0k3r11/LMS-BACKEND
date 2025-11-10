@@ -181,13 +181,21 @@ const validateQuizSubmission = [
 
 // Validation rules for course progress update
 const validateProgressUpdate = [
+  body("userId").isMongoId().withMessage("Valid user ID is required"),
+
   body("courseId").isMongoId().withMessage("Valid course ID is required"),
 
   body("lectureId").isMongoId().withMessage("Valid lecture ID is required"),
 
-  body("status")
-    .isIn(["in-progress", "completed"])
-    .withMessage("Status must be either in-progress or completed"),
+  body("progressValue")
+    .optional()
+    .isFloat({ min: 0, max: 1 })
+    .withMessage("Progress value must be between 0 and 1"),
+
+  body("isRewatch")
+    .optional()
+    .isBoolean()
+    .withMessage("isRewatch must be a boolean"),
 
   handleValidationErrors,
 ];

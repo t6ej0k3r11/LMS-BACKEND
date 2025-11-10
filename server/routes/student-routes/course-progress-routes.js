@@ -4,6 +4,7 @@ const {
   markCurrentLectureAsViewed,
   resetCurrentCourseProgress,
   updateQuizProgress,
+  updateLectureProgress,
 } = require("../../controllers/student-controller/course-progress-controller");
 const authenticate = require("../../middleware/auth-middleware");
 const {
@@ -20,6 +21,11 @@ router.post(
   "/mark-lecture-viewed",
   validateProgressUpdate,
   markCurrentLectureAsViewed
+);
+router.post(
+  "/update-lecture-progress",
+  validateProgressUpdate,
+  updateLectureProgress
 );
 router.post("/reset-progress", resetCurrentCourseProgress);
 router.post("/update-quiz-progress", updateQuizProgress);
