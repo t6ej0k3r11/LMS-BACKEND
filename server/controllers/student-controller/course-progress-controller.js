@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+goose = require("mongoose");
 const CourseProgress = require("../../models/CourseProgress");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
@@ -18,6 +18,20 @@ const checkRequiredQuizzesCompleted = async (progress, courseId) => {
   });
 
   return allFinalQuizzesPassed;
+};
+
+// Helper function to check if all quizzes (both lesson and final) are completed
+const checkAllQuizzesCompleted = async (progress, courseId) => {
+  const allQuizzes = await Quiz.find({ courseId, isActive: true });
+
+  const allQuizzesPassed = allQuizzes.every((quiz) => {
+    const quizProg = progress.quizzesProgress.find(
+      (qp) => qp.quizId.toString() === quiz._id.toString()
+    );
+    return quizProg && quizProg.completed;
+  });
+
+  return allQuizzesPassed;
 };
 
 // Helper function to update progress percentage
@@ -102,13 +116,13 @@ const markCurrentLectureAsViewed = async (req, res) => {
       // Check if all lectures are fully completed (100% watched)
       const allLecturesCompleted = progress.areAllLecturesCompleted();
 
-      // Check if all required quizzes (final quizzes) are passed
-      const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
+      // Check if all quizzes (both lesson and final) are passed
+      const allQuizzesPassed = await checkAllQuizzesCompleted(
         progress,
         courseId
       );
 
-      if (allLecturesCompleted && allRequiredQuizzesPassed) {
+      if (allLecturesCompleted && allQuizzesPassed) {
         progress.completed = true;
         progress.completionDate = new Date();
         await progress.save();
@@ -260,17 +274,10 @@ const updateQuizProgress = async (req, res) => {
     // Check if all lectures are fully completed (100% watched)
     const allLecturesCompleted = progress.areAllLecturesCompleted();
 
-    // Check if all required quizzes (final quizzes) are passed
-    const allRequiredQuizzesPassed = await checkRequiredQuizzesCompleted(
-      progress,
-      courseId
-    );
+    // Check if all quizzes (both lesson and final) are passed
+    const allQuizzesPassed = await checkAllQuizzesCompleted(progress, courseId);
 
-    if (
-      allLecturesCompleted &&
-      allRequiredQuizzesPassed &&
-      !progress.completed
-    ) {
+    if (allLecturesCompleted && allQuizzesPassed && !progress.completed) {
       progress.completed = true;
       progress.completionDate = new Date();
       await progress.save();
