@@ -633,6 +633,7 @@ const submitQuizAttempt = async (req, res) => {
         totalPoints,
         passed,
         timeSpent,
+        courseId: quiz.courseId,
       },
     });
   } catch (e) {
@@ -728,6 +729,8 @@ const getQuizResults = async (req, res) => {
       success: true,
       data: {
         quiz: {
+          _id: quiz._id,
+          courseId: quiz.courseId,
           title: quiz.title,
           passingScore: requiredScore,
           attemptsAllowed: maxAttempts,
