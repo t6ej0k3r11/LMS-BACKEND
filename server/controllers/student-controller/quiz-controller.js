@@ -93,7 +93,12 @@ const getQuizzesByCourse = async (req, res) => {
       } else {
         // Lesson quiz - check if corresponding lecture is completed
         return (
-          courseProgress && courseProgress.isLectureCompleted(quiz.lectureId)
+          courseProgress &&
+          courseProgress.lecturesProgress.some(
+            (lp) =>
+              lp.lectureId.toString() === quiz.lectureId.toString() &&
+              lp.progressValue >= 1
+          )
         );
       }
     });
@@ -261,7 +266,11 @@ const startQuizAttempt = async (req, res) => {
 
       if (
         !courseProgress ||
-        !courseProgress.isLectureCompleted(quiz.lectureId)
+        !courseProgress.lecturesProgress.some(
+          (lp) =>
+            lp.lectureId.toString() === quiz.lectureId.toString() &&
+            lp.progressValue >= 1
+        )
       ) {
         return res.status(403).json({
           success: false,
@@ -592,7 +601,7 @@ const getQuizResults = async (req, res) => {
 
     // For final quiz, show required score
     const requiredScore = quiz.quizType === "final" ? 80 : quiz.passingScore;
-    const maxAttempts = quiz.quizType === "final" ? 2 : quiz.attemptsAllowed;
+    const maxAttempts = quiz.attemptsAllowed;
 
     res.status(200).json({
       success: true,

@@ -1,4 +1,4 @@
-goose = require("mongoose");
+const mongoose = require("mongoose");
 const CourseProgress = require("../../models/CourseProgress");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");

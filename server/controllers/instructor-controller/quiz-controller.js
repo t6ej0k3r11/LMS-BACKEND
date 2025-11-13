@@ -139,7 +139,8 @@ const createQuiz = async (req, res) => {
       questions,
       passingScore: passingScore || 70,
       timeLimit,
-      attemptsAllowed: attemptsAllowed || 1,
+      attemptsAllowed: attemptsAllowed || (quizType === "final" ? 2 : 1),
+      isActive: true,
       createdBy: instructorId,
     });
 
