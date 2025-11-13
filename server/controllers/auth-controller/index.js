@@ -73,6 +73,15 @@ const registerUser = async (req, res) => {
     });
   }
 
+  // Validate role
+  const validRoles = ["student", "instructor", "admin"];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid role. Must be one of: student, instructor, admin",
+    });
+  }
+
   // Validate password strength
   const passwordValidation = validatePasswordStrength(password);
   if (!passwordValidation.isValid) {

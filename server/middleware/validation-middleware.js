@@ -40,8 +40,8 @@ const validateRegistration = [
     ),
 
   body("role")
-    .isIn(["student", "instructor"])
-    .withMessage("Role must be either student or instructor"),
+    .isIn(["student", "instructor", "admin"])
+    .withMessage("Role must be either student, instructor, or admin"),
 
   handleValidationErrors,
 ];

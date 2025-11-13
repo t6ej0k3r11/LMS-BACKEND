@@ -8,13 +8,17 @@ const Order = require("../../models/Order");
 const addNewCourse = async (req, res) => {
   try {
     const courseData = req.body;
+
+    // Set default approval status to pending for new courses
+    courseData.approvalStatus = "pending";
+
     const newlyCreatedCourse = new Course(courseData);
     const saveCourse = await newlyCreatedCourse.save();
 
     if (saveCourse) {
       res.status(201).json({
         success: true,
-        message: "Course saved successfully",
+        message: "Course submitted successfully and is pending admin approval",
         data: saveCourse,
       });
     }

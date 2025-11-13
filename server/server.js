@@ -10,6 +10,7 @@ console.log("MONGO_URI set:", !!process.env.MONGO_URI);
 
 // Routes
 const authRoutes = require("./routes/auth-routes/index");
+const adminRoutes = require("./routes/admin-routes/index");
 const mediaRoutes = require("./routes/instructor-routes/media-routes");
 const instructorCourseRoutes = require("./routes/instructor-routes/course-routes");
 const instructorQuizRoutes = require("./routes/instructor-routes/quiz-routes");
@@ -61,6 +62,7 @@ mongoose
 // 🚏 Routes
 // =========================
 app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
 app.use("/media", mediaRoutes);
 app.use("/instructor/course", instructorCourseRoutes);
 app.use("/instructor/quiz", instructorQuizRoutes);

@@ -56,6 +56,14 @@ const CourseSchema = new mongoose.Schema({
   ],
   curriculum: [LectureSchema],
   isPublished: Boolean,
+  approvalStatus: {
+    type: String,
+    enum: ["pending", "approved", "rejected"],
+    default: "pending",
+  },
+  approvalDate: Date,
+  approvedBy: String, // admin ID who approved/rejected
+  rejectionReason: String,
 });
 
 // Add indexes for frequently queried fields

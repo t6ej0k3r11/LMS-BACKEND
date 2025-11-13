@@ -50,6 +50,10 @@ const getAllStudentViewCourses = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    // Only show approved courses to students
+    filters.approvalStatus = "approved";
+    filters.isPublished = true;
+
     const coursesList = await Course.find(filters)
       .sort(sortParam)
       .skip(skip)
