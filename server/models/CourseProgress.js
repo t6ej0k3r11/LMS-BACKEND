@@ -93,8 +93,7 @@ CourseProgressSchema.methods.isLectureCompleted = function (lectureId) {
   );
   return (
     lectureProgress &&
-    lectureProgress.viewed &&
-    lectureProgress.progressValue >= 1
+    (lectureProgress.viewed || lectureProgress.progressValue >= 1)
   );
 };
 

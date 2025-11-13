@@ -34,6 +34,14 @@ const createQuiz = async (req, res) => {
       });
     }
 
+    // Validate courseId format
+    if (!courseId || !require("mongoose").Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
     // Validate quiz type
     if (!["lesson", "final"].includes(quizType)) {
       return res.status(400).json({
@@ -43,11 +51,19 @@ const createQuiz = async (req, res) => {
     }
 
     // Validate lecture ID for lesson quizzes
-    if (quizType === "lesson" && !lectureId) {
-      return res.status(400).json({
-        success: false,
-        message: "Lecture ID is required for lesson quizzes",
-      });
+    if (quizType === "lesson") {
+      if (!lectureId) {
+        return res.status(400).json({
+          success: false,
+          message: "Lecture ID is required for lesson quizzes",
+        });
+      }
+      if (!require("mongoose").Types.ObjectId.isValid(lectureId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid lecture ID format",
+        });
+      }
     }
 
     // Validate questions
@@ -138,7 +154,7 @@ const createQuiz = async (req, res) => {
     console.error("Error creating quiz:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to create quiz. Please try again.",
     });
   }
 };
@@ -148,6 +164,14 @@ const getQuizzesByCourse = async (req, res) => {
     const { courseId } = req.params;
     const instructorId = req.user._id;
 
+    // Validate courseId format
+    if (!courseId || !require("mongoose").Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
     const quizzes = await Quiz.find({ courseId, createdBy: instructorId });
 
     res.status(200).json({
@@ -155,10 +179,10 @@ const getQuizzesByCourse = async (req, res) => {
       data: quizzes,
     });
   } catch (e) {
-    console.error("Error getting quiz results:", e);
+    console.error("Error getting quizzes by course:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to retrieve quizzes. Please try again.",
     });
   }
 };
@@ -168,12 +192,20 @@ const getQuizById = async (req, res) => {
     const { quizId } = req.params;
     const instructorId = req.user._id;
 
+    // Validate quizId format
+    if (!quizId || !require("mongoose").Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz ID format",
+      });
+    }
+
     const quiz = await Quiz.findOne({ _id: quizId, createdBy: instructorId });
 
     if (!quiz) {
       return res.status(404).json({
         success: false,
-        message: "Quiz not found!",
+        message: "Quiz not found",
       });
     }
 
@@ -182,10 +214,10 @@ const getQuizById = async (req, res) => {
       data: quiz,
     });
   } catch (e) {
-    console.error("Error deleting quiz:", e);
+    console.error("Error getting quiz by ID:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to retrieve quiz. Please try again.",
     });
   }
 };
@@ -196,6 +228,14 @@ const updateQuiz = async (req, res) => {
     const instructorId = req.user._id;
     const updateData = req.body;
 
+    // Validate quizId format
+    if (!quizId || !require("mongoose").Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz ID format",
+      });
+    }
+
     const updatedQuiz = await Quiz.findOneAndUpdate(
       { _id: quizId, createdBy: instructorId },
       updateData,
@@ -205,7 +245,7 @@ const updateQuiz = async (req, res) => {
     if (!updatedQuiz) {
       return res.status(404).json({
         success: false,
-        message: "Quiz not found!",
+        message: "Quiz not found",
       });
     }
 
@@ -218,7 +258,7 @@ const updateQuiz = async (req, res) => {
     console.error("Error updating quiz:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to update quiz. Please try again.",
     });
   }
 };
@@ -228,6 +268,14 @@ const deleteQuiz = async (req, res) => {
     const { quizId } = req.params;
     const instructorId = req.user._id;
 
+    // Validate quizId format
+    if (!quizId || !require("mongoose").Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz ID format",
+      });
+    }
+
     const deletedQuiz = await Quiz.findOneAndDelete({
       _id: quizId,
       createdBy: instructorId,
@@ -236,7 +284,7 @@ const deleteQuiz = async (req, res) => {
     if (!deletedQuiz) {
       return res.status(404).json({
         success: false,
-        message: "Quiz not found!",
+        message: "Quiz not found",
       });
     }
 
@@ -245,10 +293,10 @@ const deleteQuiz = async (req, res) => {
       message: "Quiz deleted successfully",
     });
   } catch (e) {
-    console.error("Error getting quizzes by course:", e);
+    console.error("Error deleting quiz:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to delete quiz. Please try again.",
     });
   }
 };
@@ -258,12 +306,20 @@ const getQuizResults = async (req, res) => {
     const { quizId } = req.params;
     const instructorId = req.user._id;
 
+    // Validate quizId format
+    if (!quizId || !require("mongoose").Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz ID format",
+      });
+    }
+
     // First, verify the quiz belongs to the instructor
     const quiz = await Quiz.findOne({ _id: quizId, createdBy: instructorId });
     if (!quiz) {
       return res.status(404).json({
         success: false,
-        message: "Quiz not found!",
+        message: "Quiz not found",
       });
     }
 
@@ -277,10 +333,10 @@ const getQuizResults = async (req, res) => {
       data: attempts,
     });
   } catch (e) {
-    console.error("Error getting quiz by ID:", e);
+    console.error("Error getting quiz results:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to retrieve quiz results. Please try again.",
     });
   }
 };
@@ -291,11 +347,31 @@ const reviewBroadTextAnswer = async (req, res) => {
     const { pointsEarned, reviewNotes } = req.body;
     const instructorId = req.user._id;
 
+    // Validate parameters
+    if (
+      !attemptId ||
+      !questionId ||
+      !require("mongoose").Types.ObjectId.isValid(attemptId) ||
+      !require("mongoose").Types.ObjectId.isValid(questionId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attempt or question ID format",
+      });
+    }
+
+    if (pointsEarned === undefined || pointsEarned < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Points earned must be a non-negative number",
+      });
+    }
+
     const attempt = await QuizAttempt.findById(attemptId).populate("quizId");
     if (!attempt) {
       return res.status(404).json({
         success: false,
-        message: "Attempt not found!",
+        message: "Quiz attempt not found",
       });
     }
 
@@ -303,7 +379,7 @@ const reviewBroadTextAnswer = async (req, res) => {
     if (attempt.quizId.createdBy.toString() !== instructorId) {
       return res.status(403).json({
         success: false,
-        message: "Access denied!",
+        message: "Access denied. You can only review quizzes you created.",
       });
     }
 
@@ -315,7 +391,7 @@ const reviewBroadTextAnswer = async (req, res) => {
     if (answerIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: "Answer not found!",
+        message: "Answer not found for this question",
       });
     }
 
@@ -325,7 +401,8 @@ const reviewBroadTextAnswer = async (req, res) => {
     if (!question || question.type !== "broad-text") {
       return res.status(400).json({
         success: false,
-        message: "Invalid question type!",
+        message:
+          "Invalid question type. Only broad-text questions can be reviewed.",
       });
     }
 
@@ -381,7 +458,7 @@ const reviewBroadTextAnswer = async (req, res) => {
     console.error("Error reviewing broad text answer:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to review answer. Please try again.",
     });
   }
 };
@@ -411,7 +488,7 @@ const getUnreviewedAnswers = async (req, res) => {
     console.error("Error getting unreviewed answers:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: "Failed to retrieve unreviewed answers. Please try again.",
     });
   }
 };
