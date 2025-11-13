@@ -589,6 +589,173 @@ const getRecentActivities = async (req, res) => {
   }
 };
 
+// Get all courses with pagination and filtering
+const getAllCourses = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, search, instructorId } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {};
+    if (status && status !== "all") filter.approvalStatus = status;
+    if (instructorId) filter.instructorId = instructorId;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { instructorName: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const courses = await Course.find(filter)
+      .populate("instructorId", "userName userEmail")
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Course.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        courses,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalCourses: total,
+          hasNext: page * limit < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get all courses error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch courses",
+    });
+  }
+};
+
+// Update course status
+const updateCourseStatus = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { approvalStatus, rejectionReason } = req.body;
+
+    if (!["pending", "approved", "rejected"].includes(approvalStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid approval status",
+      });
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    const oldStatus = course.approvalStatus;
+    course.approvalStatus = approvalStatus;
+    course.approvalDate = new Date();
+    course.approvedBy = req.user._id;
+
+    if (approvalStatus === "rejected") {
+      if (!rejectionReason) {
+        return res.status(400).json({
+          success: false,
+          message: "Rejection reason is required",
+        });
+      }
+      course.rejectionReason = rejectionReason;
+    } else if (approvalStatus === "approved") {
+      course.rejectionReason = undefined;
+    }
+
+    await course.save();
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      `course_${approvalStatus}`,
+      "course",
+      courseId,
+      course.title,
+      {
+        oldStatus,
+        newStatus: approvalStatus,
+        rejectionReason: approvalStatus === "rejected" ? rejectionReason : null,
+      },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Course status updated to ${approvalStatus}`,
+      data: {
+        courseId,
+        approvalStatus: course.approvalStatus,
+        approvalDate: course.approvalDate,
+        rejectionReason: course.rejectionReason,
+      },
+    });
+  } catch (error) {
+    console.error("Update course status error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update course status",
+    });
+  }
+};
+
+// Delete course
+const deleteCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    await Course.findByIdAndDelete(courseId);
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "course_deleted",
+      "course",
+      courseId,
+      course.title,
+      {
+        deletedCourse: {
+          title: course.title,
+          instructorName: course.instructorName,
+          approvalStatus: course.approvalStatus,
+        },
+      },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Course deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete course error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete course",
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   updateUser,
@@ -601,4 +768,7 @@ module.exports = {
   getAuditLogs,
   getAdminStats,
   getRecentActivities,
+  getAllCourses,
+  updateCourseStatus,
+  deleteCourse,
 };

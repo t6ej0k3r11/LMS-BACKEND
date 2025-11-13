@@ -13,6 +13,9 @@ const {
   getAuditLogs,
   getAdminStats,
   getRecentActivities,
+  getAllCourses,
+  updateCourseStatus,
+  deleteCourse,
 } = require("../../controllers/admin-controller/index");
 
 // Apply admin middleware to all routes
@@ -26,7 +29,12 @@ router.patch("/users/:userId/deactivate", deactivateUser);
 router.patch("/users/:userId/reactivate", reactivateUser);
 router.post("/users/bulk-action", bulkUserAction);
 
-// Course approval routes
+// Course management routes
+router.get("/courses", getAllCourses);
+router.put("/courses/:courseId/status", updateCourseStatus);
+router.delete("/courses/:courseId", deleteCourse);
+
+// Course approval routes (legacy)
 router.get("/courses/pending", getPendingCourses);
 router.post("/courses/:courseId/review", reviewCourse);
 
