@@ -1,5 +1,8 @@
 const User = require("../../models/User");
+const PasswordResetToken = require("../../models/PasswordResetToken");
 const jwt = require("jsonwebtoken");
+const crypto = require('crypto');
+const { sendPasswordResetEmail } = require('../../utils/emailService');
 
 // Password strength validation function
 const validatePasswordStrength = (password) => {
@@ -235,4 +238,123 @@ const refreshAccessToken = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, refreshAccessToken };
+// Request password reset
+const requestPasswordReset = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required",
+    });
+  }
+
+  try {
+    // Don't reveal if the email exists or not
+    const user = await User.findOne({ userEmail: email.toLowerCase() });
+    
+    if (user) {
+      // Generate a reset token
+      const token = await PasswordResetToken.generateToken();
+      
+      // Save the token to the database
+      await PasswordResetToken.create({
+        userId: user._id,
+        token,
+      });
+
+      // Send email with reset link
+      const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+      await sendPasswordResetEmail(user.userEmail, resetLink);
+    }
+
+    // Always return success to prevent user enumeration
+    res.status(200).json({
+      success: true,
+      message: "If an account with that email exists, a password reset link has been sent",
+    });
+  } catch (error) {
+    console.error("Password reset request error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error processing password reset request",
+    });
+  }
+};
+
+// Reset password with token
+const resetPassword = async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "Token and new password are required",
+    });
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePasswordStrength(newPassword);
+  if (!passwordValidation.isValid) {
+    return res.status(400).json({
+      success: false,
+      message: "Password does not meet security requirements",
+      errors: passwordValidation.errors,
+    });
+  }
+
+  try {
+    // Find the token
+    const resetToken = await PasswordResetToken.findOne({ 
+      token,
+      used: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!resetToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(resetToken.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Update the password
+    user.password = newPassword;
+    await user.save();
+
+    // Mark token as used
+    resetToken.used = true;
+    await resetToken.save();
+
+    // Invalidate all user's sessions (optional)
+    // This would require additional implementation to track active sessions
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been reset successfully",
+    });
+  } catch (error) {
+    console.error("Password reset error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error resetting password",
+    });
+  }
+};
+
+module.exports = { 
+  registerUser, 
+  loginUser, 
+  refreshAccessToken, 
+  requestPasswordReset, 
+  resetPassword 
+};

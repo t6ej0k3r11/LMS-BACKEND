@@ -180,6 +180,34 @@ const validateQuizSubmission = [
 ];
 
 // Validation rules for course progress update
+// Validation rules for password reset request
+const validatePasswordResetRequest = [
+  body("email")
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Please provide a valid email address"),
+
+  handleValidationErrors,
+];
+
+// Validation rules for password reset
+const validatePasswordReset = [
+  body("token")
+    .trim()
+    .notEmpty()
+    .withMessage("Reset token is required"),
+
+  body("newPassword")
+    .isLength({ min: 8 })
+    .withMessage("Password must be at least 8 characters long")
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
+    .withMessage(
+      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+    ),
+
+  handleValidationErrors,
+];
+
 const validateProgressUpdate = [
   body("userId").isMongoId().withMessage("Valid user ID is required"),
 
@@ -207,5 +235,7 @@ module.exports = {
   validateQuizCreation,
   validateQuizSubmission,
   validateProgressUpdate,
+  validatePasswordResetRequest,
+  validatePasswordReset,
   handleValidationErrors,
 };
