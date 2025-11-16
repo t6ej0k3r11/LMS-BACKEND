@@ -296,6 +296,21 @@ const startQuizAttempt = async (req, res) => {
       });
     }
 
+    // Check for in-progress attempts (prevent multiple simultaneous attempts)
+    const inProgressAttempt = await QuizAttempt.findOne({
+      quizId,
+      studentId,
+      status: "in_progress",
+    });
+
+    if (inProgressAttempt) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You already have an attempt in progress. Please complete or cancel it first.",
+      });
+    }
+
     const attemptNumber = existingAttempts + 1;
     const startedAt = new Date();
 
