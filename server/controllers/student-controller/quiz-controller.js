@@ -281,22 +281,24 @@ const startQuizAttempt = async (req, res) => {
     }
     // Final quiz - no prerequisites required beyond course enrollment
 
-    // Check attempts limit
-    const existingAttempts = await QuizAttempt.countDocuments({
+    // Count only completed attempts toward the limit
+    const completedAttemptsCount = await QuizAttempt.countDocuments({
       quizId,
       studentId,
+      status: { $ne: "in_progress" },
     });
 
-    if (existingAttempts >= (quiz.attemptsAllowed || 1)) {
+    if (
+      quiz.attemptsAllowed &&
+      completedAttemptsCount >= quiz.attemptsAllowed
+    ) {
       return res.status(403).json({
         success: false,
-        message: `Maximum attempts (${
-          quiz.attemptsAllowed || 1
-        }) reached for this quiz.`,
+        message: `Maximum attempts (${quiz.attemptsAllowed}) reached for this quiz.`,
       });
     }
 
-    // Check for in-progress attempts (prevent multiple simultaneous attempts)
+    // Check for in-progress attempt and resume instead of blocking
     const inProgressAttempt = await QuizAttempt.findOne({
       quizId,
       studentId,
@@ -304,14 +306,20 @@ const startQuizAttempt = async (req, res) => {
     });
 
     if (inProgressAttempt) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You already have an attempt in progress. Please complete or cancel it first.",
+      return res.status(200).json({
+        success: true,
+        message: "Resuming existing quiz attempt",
+        data: {
+          attemptId: inProgressAttempt._id,
+          attemptNumber: inProgressAttempt.attemptNumber,
+          startedAt: inProgressAttempt.startedAt,
+          timeLimit: quiz.timeLimit,
+          isExistingAttempt: true,
+        },
       });
     }
 
-    const attemptNumber = existingAttempts + 1;
+    const attemptNumber = completedAttemptsCount + 1;
     const startedAt = new Date();
 
     const newAttempt = new QuizAttempt({
@@ -321,7 +329,7 @@ const startQuizAttempt = async (req, res) => {
       attemptNumber,
       answers: [],
       score: 0,
-      totalPoints: quiz.questions.reduce((sum, q) => sum + q.points, 0),
+      totalPoints: quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0),
       pointsEarned: 0,
       passed: false,
       startedAt,
@@ -441,14 +449,6 @@ const submitQuizAttempt = async (req, res) => {
 
     const completedAt = new Date();
     const timeSpent = Math.floor((completedAt - attempt.startedAt) / 1000); // in seconds
-
-    // Check time limit if set
-    if (quiz.timeLimit && timeSpent > quiz.timeLimit * 60) {
-      return res.status(400).json({
-        success: false,
-        message: "Time limit exceeded. Quiz submission rejected.",
-      });
-    }
 
     // Calculate score
     let pointsEarned = 0;

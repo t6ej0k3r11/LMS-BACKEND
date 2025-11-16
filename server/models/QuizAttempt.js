@@ -52,4 +52,14 @@ QuizAttemptSchema.index({ studentId: 1 });
 QuizAttemptSchema.index({ courseId: 1 });
 QuizAttemptSchema.index({ status: 1 });
 
+// Ensure only one active attempt per student per quiz
+QuizAttemptSchema.index(
+  { quizId: 1, studentId: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "in_progress" },
+    name: "unique_active_quiz_attempt",
+  }
+);
+
 module.exports = mongoose.model("QuizAttempt", QuizAttemptSchema);
