@@ -99,7 +99,7 @@ const validateQuizCreation = [
   body("courseId").isMongoId().withMessage("Valid course ID is required"),
 
   body("lectureId")
-    .optional()
+    .optional({ nullable: true })
     .isMongoId()
     .withMessage("Valid lecture ID is required if provided"),
 
@@ -112,7 +112,7 @@ const validateQuizCreation = [
     .withMessage("Passing score must be between 0 and 100"),
 
   body("timeLimit")
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 1 })
     .withMessage("Time limit must be a positive integer in minutes"),
 
@@ -131,9 +131,9 @@ const validateQuizCreation = [
     .withMessage("At least one question is required"),
 
   body("questions.*.type")
-    .isIn(["multiple-choice", "true-false", "broad-text"])
+    .isIn(["multiple-choice", "true-false", "broad-text", "short-answer", "essay"])
     .withMessage(
-      "Question type must be 'multiple-choice', 'true-false', or 'broad-text'"
+      "Question type must be 'multiple-choice', 'true-false', 'broad-text', 'short-answer', or 'essay'"
     ),
 
   body("questions.*.question")
