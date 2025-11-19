@@ -1,0 +1,16 @@
+{
+  "name": "lms-backend",
+  "version": "1.0.0",
+  "description": "LMS Backend",
+  "scripts": {
+    "install": "cd server && npm install",
+    "dev": "cd server && npm run dev",
+    "start": "cd server && npm start",
+    "test": "cd server && npm test",
+    "test:watch": "cd server && npm run test:watch",
+    "test:integration": "cd server && npm run test:integration"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
