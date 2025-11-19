@@ -16,6 +16,13 @@ const {
   getAllCourses,
   updateCourseStatus,
   deleteCourse,
+  getPendingInstructors,
+  approveInstructor,
+  rejectInstructor,
+  createQuestion,
+  getAllQuestions,
+  updateQuestion,
+  deleteQuestion,
 } = require("../../controllers/admin-controller/index");
 
 // Apply admin middleware to all routes
@@ -44,5 +51,16 @@ router.get("/activities", getRecentActivities);
 
 // Audit logs route
 router.get("/audit-logs", getAuditLogs);
+
+// Instructor management routes
+router.get("/instructors/pending", getPendingInstructors);
+router.patch("/instructors/:id/approve", approveInstructor);
+router.patch("/instructors/:id/reject", rejectInstructor);
+
+// Question Bank management routes
+router.post("/questions", createQuestion);
+router.get("/questions", getAllQuestions);
+router.patch("/questions/:id", updateQuestion);
+router.delete("/questions/:id", deleteQuestion);
 
 module.exports = router;

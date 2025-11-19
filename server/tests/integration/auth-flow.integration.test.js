@@ -81,7 +81,8 @@ describe("Authentication Flow Integration Tests", () => {
           freePreview: true,
         },
       ],
-      isPublished: true,
+      status: "published",
+      approvalStatus: "approved",
     };
 
     const testQuiz = {

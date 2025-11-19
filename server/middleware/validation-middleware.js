@@ -4,6 +4,7 @@ const { body, validationResult } = require("express-validator");
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.log("DEBUG: Validation errors:", errors.array());
     return res.status(400).json({
       success: false,
       message: "Validation failed",
@@ -62,13 +63,13 @@ const validateLogin = [
 const validateCourseCreation = [
   body("title")
     .trim()
-    .isLength({ min: 5, max: 100 })
-    .withMessage("Course title must be between 5 and 100 characters"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Course title must be between 3 and 100 characters"),
 
   body("description")
     .trim()
-    .isLength({ min: 20, max: 1000 })
-    .withMessage("Course description must be between 20 and 1000 characters"),
+    .isLength({ min: 10, max: 1000 })
+    .withMessage("Course description must be between 10 and 1000 characters"),
 
   body("category").trim().notEmpty().withMessage("Category is required"),
 
@@ -77,6 +78,7 @@ const validateCourseCreation = [
     .withMessage("Level must be beginner, intermediate, or advanced"),
 
   body("pricing")
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
     .withMessage("Price must be a positive number"),
 
@@ -104,10 +106,12 @@ const validateQuizCreation = [
     .withMessage("Valid lecture ID is required if provided"),
 
   body("quizType")
+    .optional()
     .isIn(["lesson", "final"])
     .withMessage("Quiz type must be either 'lesson' or 'final'"),
 
   body("passingScore")
+    .optional()
     .isFloat({ min: 0, max: 100 })
     .withMessage("Passing score must be between 0 and 100"),
 
@@ -129,39 +133,6 @@ const validateQuizCreation = [
   body("questions")
     .isArray({ min: 1 })
     .withMessage("At least one question is required"),
-
-  body("questions.*.type")
-    .isIn(["multiple-choice", "true-false", "broad-text", "short-answer", "essay"])
-    .withMessage(
-      "Question type must be 'multiple-choice', 'true-false', 'broad-text', 'short-answer', or 'essay'"
-    ),
-
-  body("questions.*.question")
-    .trim()
-    .isLength({ min: 10, max: 500 })
-    .withMessage("Question text must be between 10 and 500 characters"),
-
-  body("questions.*.options")
-    .optional()
-    .isArray()
-    .withMessage("Options must be an array if provided"),
-
-  body("questions.*.correctAnswer")
-    .optional()
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage("Correct answer must be a non-empty string if provided"),
-
-  body("questions.*.points")
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage("Points must be a positive integer"),
-
-  body("questions.*.requiresReview")
-    .optional()
-    .isBoolean()
-    .withMessage("Requires review must be a boolean"),
 
   handleValidationErrors,
 ];
@@ -192,10 +163,7 @@ const validatePasswordResetRequest = [
 
 // Validation rules for password reset
 const validatePasswordReset = [
-  body("token")
-    .trim()
-    .notEmpty()
-    .withMessage("Reset token is required"),
+  body("token").trim().notEmpty().withMessage("Reset token is required"),
 
   body("newPassword")
     .isLength({ min: 8 })

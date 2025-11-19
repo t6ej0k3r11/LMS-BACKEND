@@ -2,6 +2,12 @@
 const mongoose = require("mongoose");
 
 const QuestionSchema = new mongoose.Schema({
+  mode: { type: String, enum: ["custom", "bank"], default: "custom" }, // custom or bank reference
+  bankQuestionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "QuestionBank",
+    default: null,
+  }, // reference to question bank
   type: { type: String, required: true }, // e.g., 'multiple-choice', 'true-false', 'broad-text'
   question: { type: String, required: true },
   options: [{ type: String }], // array of options for multiple choice
@@ -9,6 +15,10 @@ const QuestionSchema = new mongoose.Schema({
   correctAnswerIndex: { type: Number, default: null },
   points: { type: Number, default: 1 },
   requiresReview: { type: Boolean, default: false }, // true for broad-text questions
+  explanation: { type: String }, // explanation for the correct answer
+  tags: [{ type: String }], // for bank questions
+  subject: { type: String }, // for bank questions
+  difficulty: { type: String, enum: ["easy", "medium", "hard"] }, // for bank questions
 });
 
 const QuizSchema = new mongoose.Schema(
@@ -34,6 +44,7 @@ const QuizSchema = new mongoose.Schema(
     passingScore: { type: Number, required: true }, // e.g., 70 for 70%
     timeLimit: { type: Number }, // in minutes
     attemptsAllowed: { type: Number, default: 1 },
+    instantFeedbackEnabled: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

@@ -55,7 +55,11 @@ const CourseSchema = new mongoose.Schema({
     },
   ],
   curriculum: [LectureSchema],
-  isPublished: Boolean,
+  status: {
+    type: String,
+    enum: ["draft", "published"],
+    default: "draft",
+  },
   approvalStatus: {
     type: String,
     enum: ["pending", "approved", "rejected"],
@@ -70,6 +74,6 @@ const CourseSchema = new mongoose.Schema({
 CourseSchema.index({ instructorId: 1 });
 CourseSchema.index({ category: 1 });
 CourseSchema.index({ level: 1 });
-CourseSchema.index({ isPublished: 1 });
+CourseSchema.index({ status: 1 });
 
 module.exports = mongoose.model("Course", CourseSchema);
