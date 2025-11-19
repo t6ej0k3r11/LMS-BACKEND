@@ -6,16 +6,13 @@ const UserSchema = new mongoose.Schema(
     userName: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       minlength: 3,
       maxlength: 50,
-      index: true,
     },
     userEmail: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
       match: [
@@ -35,7 +32,7 @@ const UserSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "inactive"],
+      enum: ["pending", "approved", "active", "inactive"],
       default: "active",
     },
     enrollmentDate: {
@@ -51,6 +48,8 @@ const UserSchema = new mongoose.Schema(
 );
 
 // Add indexes for frequently queried fields
+UserSchema.index({ userName: 1 }, { unique: true });
+UserSchema.index({ userEmail: 1 }, { unique: true });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
 UserSchema.index({ role: 1, status: 1 });

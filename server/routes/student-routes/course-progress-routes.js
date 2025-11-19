@@ -1,10 +1,9 @@
 const express = require("express");
 const {
   getCurrentCourseProgress,
+  getUserCourseProgress,
   markCurrentLectureAsViewed,
   resetCurrentCourseProgress,
-  updateQuizProgress,
-  updateLectureProgress,
 } = require("../../controllers/student-controller/course-progress-controller");
 const authenticate = require("../../middleware/auth-middleware");
 const {
@@ -16,17 +15,15 @@ const router = express.Router();
 // Apply authentication middleware to all routes
 router.use(authenticate.authenticate);
 
+// New simplified progress endpoint
+router.get("/progress/:courseId", getUserCourseProgress);
+
+// Legacy endpoints for backward compatibility
 router.get("/get/:userId/:courseId", getCurrentCourseProgress);
 router.post(
   "/mark-lecture-viewed",
   validateProgressUpdate,
   markCurrentLectureAsViewed
 );
-router.post(
-  "/update-lecture-progress",
-  validateProgressUpdate,
-  updateLectureProgress
-);
 router.post("/reset-progress", resetCurrentCourseProgress);
-router.post("/update-quiz-progress", updateQuizProgress);
 module.exports = router;

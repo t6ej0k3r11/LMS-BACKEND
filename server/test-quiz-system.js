@@ -54,7 +54,8 @@ const TEST_COURSE = {
       freePreview: true,
     },
   ],
-  isPublished: true,
+  status: "published",
+  approvalStatus: "approved",
 };
 
 const TEST_QUIZ_AUTO_ONLY = {

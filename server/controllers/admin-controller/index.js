@@ -1,6 +1,8 @@
 const User = require("../../models/User");
 const Course = require("../../models/Course");
 const AuditLog = require("../../models/AuditLog");
+const QuestionBank = require("../../models/QuestionBank");
+const { sendInstructorDecisionEmail } = require("../../utils/emailService");
 
 // Helper function to log admin actions
 const logAdminAction = async (
@@ -756,6 +758,458 @@ const deleteCourse = async (req, res) => {
   }
 };
 
+// Get pending instructor applications
+const getPendingInstructors = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const instructors = await User.find({
+      role: "instructor",
+      status: "pending",
+    })
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await User.countDocuments({
+      role: "instructor",
+      status: "pending",
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        instructors,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalInstructors: total,
+          hasNext: page * limit < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get pending instructors error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending instructors",
+    });
+  }
+};
+
+// Approve instructor application
+const approveInstructor = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const instructor = await User.findById(id);
+    if (!instructor) {
+      return res.status(404).json({
+        success: false,
+        message: "Instructor not found",
+      });
+    }
+
+    if (instructor.role !== "instructor" || instructor.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid instructor application",
+      });
+    }
+
+    // Update status to approved
+    instructor.status = "approved";
+    await instructor.save();
+
+    // Send approval email
+    try {
+      await sendInstructorDecisionEmail(
+        instructor.userEmail,
+        instructor.userName,
+        "approved"
+      );
+    } catch (emailError) {
+      console.error("Failed to send approval email:", emailError);
+      // Don't fail the request if email fails
+    }
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "instructor_approved",
+      "user",
+      id,
+      instructor.userName,
+      { decision: "approved" },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Instructor approved successfully",
+      data: {
+        instructorId: id,
+        status: "approved",
+      },
+    });
+  } catch (error) {
+    console.error("Approve instructor error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to approve instructor",
+    });
+  }
+};
+
+// Reject instructor application
+const rejectInstructor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection reason is required",
+      });
+    }
+
+    const instructor = await User.findById(id);
+    if (!instructor) {
+      return res.status(404).json({
+        success: false,
+        message: "Instructor not found",
+      });
+    }
+
+    if (instructor.role !== "instructor" || instructor.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid instructor application",
+      });
+    }
+
+    // Update status to rejected
+    instructor.status = "rejected";
+    await instructor.save();
+
+    // Send rejection email
+    try {
+      await sendInstructorDecisionEmail(
+        instructor.userEmail,
+        instructor.userName,
+        "rejected",
+        reason
+      );
+    } catch (emailError) {
+      console.error("Failed to send rejection email:", emailError);
+      // Don't fail the request if email fails
+    }
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "instructor_rejected",
+      "user",
+      id,
+      instructor.userName,
+      { decision: "rejected", reason },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Instructor rejected successfully",
+      data: {
+        instructorId: id,
+        status: "rejected",
+        reason,
+      },
+    });
+  } catch (error) {
+    console.error("Reject instructor error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reject instructor",
+    });
+  }
+};
+
+// Question Bank Management Functions
+
+// Create a new question in the question bank
+const createQuestion = async (req, res) => {
+  try {
+    const {
+      questionText,
+      options,
+      correctAnswer,
+      explanation,
+      tags,
+      subject,
+      difficulty,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !questionText ||
+      !options ||
+      !Array.isArray(options) ||
+      options.length === 0 ||
+      !correctAnswer ||
+      !subject ||
+      !difficulty
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing required fields: questionText, options, correctAnswer, subject, difficulty",
+      });
+    }
+
+    // Validate difficulty
+    if (!["easy", "medium", "hard"].includes(difficulty)) {
+      return res.status(400).json({
+        success: false,
+        message: "Difficulty must be 'easy', 'medium', or 'hard'",
+      });
+    }
+
+    // Validate correct answer is in options
+    if (!options.includes(correctAnswer)) {
+      return res.status(400).json({
+        success: false,
+        message: "Correct answer must be one of the options",
+      });
+    }
+
+    const newQuestion = new QuestionBank({
+      questionText,
+      options,
+      correctAnswer,
+      explanation,
+      tags: tags || [],
+      subject,
+      difficulty,
+      createdBy: req.user._id,
+    });
+
+    const savedQuestion = await newQuestion.save();
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "question_created",
+      "question",
+      savedQuestion._id,
+      questionText.substring(0, 50) + "...",
+      { subject, difficulty },
+      req
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Question created successfully",
+      data: savedQuestion,
+    });
+  } catch (error) {
+    console.error("Create question error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create question",
+    });
+  }
+};
+
+// Get all questions with filtering and pagination
+const getAllQuestions = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      subject,
+      difficulty,
+      tags,
+      search,
+    } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {};
+
+    if (subject && subject !== "all") filter.subject = subject;
+    if (difficulty && difficulty !== "all") filter.difficulty = difficulty;
+    if (tags) {
+      const tagArray = tags.split(",").map((tag) => tag.trim());
+      filter.tags = { $in: tagArray };
+    }
+    if (search) {
+      filter.$or = [
+        { questionText: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+        { subject: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const questions = await QuestionBank.find(filter)
+      .populate("createdBy", "userName")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await QuestionBank.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        questions,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalQuestions: total,
+          hasNext: page * limit < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get all questions error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch questions",
+    });
+  }
+};
+
+// Update a question
+const updateQuestion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const question = await QuestionBank.findById(id);
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found",
+      });
+    }
+
+    // Validate difficulty if provided
+    if (
+      updateData.difficulty &&
+      !["easy", "medium", "hard"].includes(updateData.difficulty)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Difficulty must be 'easy', 'medium', or 'hard'",
+      });
+    }
+
+    // Validate correct answer if options are updated
+    if (updateData.options && updateData.correctAnswer) {
+      if (!updateData.options.includes(updateData.correctAnswer)) {
+        return res.status(400).json({
+          success: false,
+          message: "Correct answer must be one of the options",
+        });
+      }
+    } else if (
+      updateData.correctAnswer &&
+      !question.options.includes(updateData.correctAnswer)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Correct answer must be one of the options",
+      });
+    }
+
+    const oldData = {
+      questionText: question.questionText,
+      subject: question.subject,
+      difficulty: question.difficulty,
+    };
+
+    Object.assign(question, updateData);
+    await question.save();
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "question_updated",
+      "question",
+      id,
+      question.questionText.substring(0, 50) + "...",
+      { oldData, newData: updateData },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Question updated successfully",
+      data: question,
+    });
+  } catch (error) {
+    console.error("Update question error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update question",
+    });
+  }
+};
+
+// Delete a question
+const deleteQuestion = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const question = await QuestionBank.findById(id);
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found",
+      });
+    }
+
+    await QuestionBank.findByIdAndDelete(id);
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "question_deleted",
+      "question",
+      id,
+      question.questionText.substring(0, 50) + "...",
+      {
+        deletedQuestion: {
+          questionText: question.questionText,
+          subject: question.subject,
+          difficulty: question.difficulty,
+        },
+      },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Question deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete question error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete question",
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   updateUser,
@@ -771,4 +1225,11 @@ module.exports = {
   getAllCourses,
   updateCourseStatus,
   deleteCourse,
+  getPendingInstructors,
+  approveInstructor,
+  rejectInstructor,
+  createQuestion,
+  getAllQuestions,
+  updateQuestion,
+  deleteQuestion,
 };

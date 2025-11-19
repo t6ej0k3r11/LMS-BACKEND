@@ -5,11 +5,16 @@ const {
   deleteMediaFromCloudinary,
 } = require("../../helpers/cloudinary");
 const authenticate = require("../../middleware/auth-middleware");
+const {
+  checkInstructorRole,
+} = require("../../middleware/instructor-middleware");
 
 const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate.authenticate);
+// Apply instructor role check to all routes (allows any instructor status)
+router.use(checkInstructorRole);
 
 const upload = multer({ dest: "uploads/" });
 
@@ -38,14 +43,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     // File type validation
     const allowedTypes = [
+      "application/pdf",
+      "video/mp4",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "image/jpeg",
       "image/png",
       "image/gif",
       "image/webp",
-      "video/mp4",
-      "video/avi",
-      "video/mov",
-      "application/pdf",
     ];
     console.log(
       "DEBUG: Server-side validation - allowedTypes:",
@@ -58,12 +62,12 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "Invalid file type. Allowed types: JPEG, PNG, GIF, WebP, MP4, AVI, MOV, PDF",
+          "Invalid file type. Allowed types: PDF, MP4, DOCX, JPEG, PNG, GIF, WebP",
       });
     }
 
-    // File size validation (10MB limit)
-    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    // File size validation (50MB limit)
+    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
     console.log(
       "DEBUG: Server-side validation - maxSize:",
       maxSize,
@@ -74,7 +78,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       console.log("DEBUG: File size validation failed on server");
       return res.status(400).json({
         success: false,
-        message: "File too large. Maximum size allowed is 10MB",
+        message: "File too large. Maximum size allowed is 50MB",
       });
     }
 
@@ -134,16 +138,15 @@ router.post("/bulk-upload", upload.array("files", 10), async (req, res) => {
 
     // File validation for each file
     const allowedTypes = [
+      "application/pdf",
+      "video/mp4",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "image/jpeg",
       "image/png",
       "image/gif",
       "image/webp",
-      "video/mp4",
-      "video/avi",
-      "video/mov",
-      "application/pdf",
     ];
-    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
 
     const validationErrors = [];
     req.files.forEach((file, index) => {

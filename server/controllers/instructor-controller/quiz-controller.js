@@ -1,5 +1,6 @@
 const Quiz = require("../../models/Quiz");
 const QuizAttempt = require("../../models/QuizAttempt");
+const QuestionBank = require("../../models/QuestionBank");
 const {
   updateQuizProgress,
 } = require("../student-controller/course-progress-controller");
@@ -9,28 +10,22 @@ const createQuiz = async (req, res) => {
     const {
       courseId,
       lectureId,
-      quizType,
+      quizType = "lesson",
       title,
       description,
       questions,
       passingScore,
       timeLimit,
       attemptsAllowed,
+      instantFeedbackEnabled,
     } = req.body;
     const instructorId = req.user._id; // Get user ID from JWT payload
 
     // Validate required fields
-    if (
-      !courseId ||
-      !title ||
-      !quizType ||
-      !questions ||
-      questions.length === 0
-    ) {
+    if (!courseId || !title || !questions || questions.length === 0) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields: courseId, title, quizType, or questions",
+        message: "Missing required fields: courseId, title, or questions",
       });
     }
 
@@ -69,64 +64,143 @@ const createQuiz = async (req, res) => {
     // Validate questions
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      if (!q.question || !q.type) {
-        return res.status(400).json({
-          success: false,
-          message: `Question ${i + 1} is missing required fields`,
-        });
-      }
 
-      // Validate question types
-      if (
-        ![
-          "multiple-choice",
-          "true-false",
-          "broad-text",
-          "short-answer",
-          "essay",
-        ].includes(q.type)
-      ) {
+      // Set default mode if not provided
+      q.mode = q.mode || "custom";
+
+      // Validate mode
+      if (!["custom", "bank"].includes(q.mode)) {
         return res.status(400).json({
           success: false,
           message: `Question ${
             i + 1
-          } has invalid type. Must be 'multiple-choice', 'true-false', 'broad-text', 'short-answer', or 'essay'`,
+          } must have a valid mode ('custom' or 'bank')`,
         });
       }
 
-      // Validate options for multiple choice
-      if (q.type === "multiple-choice") {
-        if (!q.options || q.options.length < 2) {
+      if (q.mode === "bank") {
+        // For bank questions, only bankQuestionId is required
+        if (
+          !q.bankQuestionId ||
+          !require("mongoose").Types.ObjectId.isValid(q.bankQuestionId)
+        ) {
           return res.status(400).json({
             success: false,
-            message: `Question ${i + 1} must have at least 2 options`,
+            message: `Question ${
+              i + 1
+            } (bank mode) must have a valid bankQuestionId`,
           });
         }
-        if (!q.correctAnswer) {
+
+        // Verify the bank question exists
+        const bankQuestion = await QuestionBank.findById(q.bankQuestionId);
+        if (!bankQuestion) {
           return res.status(400).json({
             success: false,
-            message: `Question ${i + 1} must have a correct answer`,
+            message: `Question ${
+              i + 1
+            } references a non-existent bank question`,
+          });
+        }
+
+        // Validate points for bank questions
+        if (!q.points || q.points < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${i + 1} must have at least 1 point`,
+          });
+        }
+      } else if (q.mode === "custom") {
+        // For custom questions, validate as before
+        if (!q.question || !q.type) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${
+              i + 1
+            } (custom mode) is missing required fields`,
+          });
+        }
+
+        // Validate question types
+        if (
+          ![
+            "multiple-choice",
+            "true-false",
+            "broad-text",
+            "short-answer",
+            "essay",
+          ].includes(q.type)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${
+              i + 1
+            } has invalid type. Must be 'multiple-choice', 'true-false', 'broad-text', 'short-answer', or 'essay'`,
+          });
+        }
+
+        // Validate options for multiple choice
+        if (q.type === "multiple-choice") {
+          if (!q.options || q.options.length < 2) {
+            return res.status(400).json({
+              success: false,
+              message: `Question ${i + 1} must have at least 2 options`,
+            });
+          }
+          if (!q.correctAnswer) {
+            return res.status(400).json({
+              success: false,
+              message: `Question ${i + 1} must have a correct answer`,
+            });
+          }
+        }
+
+        // Validate correct answer for true-false
+        if (
+          q.type === "true-false" &&
+          !["true", "false"].includes(q.correctAnswer)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${
+              i + 1
+            } correct answer must be 'true' or 'false'`,
+          });
+        }
+
+        // Validate points for all custom question types
+        if (!q.points || q.points < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Question ${i + 1} must have at least 1 point`,
           });
         }
       }
+    }
 
-      // Validate correct answer for true-false
-      if (
-        q.type === "true-false" &&
-        !["true", "false"].includes(q.correctAnswer)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: `Question ${i + 1} correct answer must be 'true' or 'false'`,
+    // Process questions to populate bank question data
+    const processedQuestions = [];
+    for (const q of questions) {
+      if (q.mode === "bank") {
+        // Fetch bank question data
+        const bankQuestion = await QuestionBank.findById(q.bankQuestionId);
+        processedQuestions.push({
+          mode: "bank",
+          bankQuestionId: q.bankQuestionId,
+          type: bankQuestion.type || "multiple-choice", // fallback
+          question: bankQuestion.questionText,
+          options: bankQuestion.options,
+          correctAnswer: bankQuestion.correctAnswer,
+          points: q.points, // Use the points specified in the quiz
+          requiresReview: false, // Bank questions don't require review
+          explanation: bankQuestion.explanation,
+          tags: bankQuestion.tags,
+          subject: bankQuestion.subject,
+          difficulty: bankQuestion.difficulty,
         });
-      }
-
-      // Validate points for all question types
-      if (!q.points || q.points < 1) {
-        return res.status(400).json({
-          success: false,
-          message: `Question ${i + 1} must have at least 1 point`,
-        });
+      } else {
+        // Custom question - keep as is
+        processedQuestions.push(q);
       }
     }
 
@@ -136,10 +210,11 @@ const createQuiz = async (req, res) => {
       quizType,
       title,
       description,
-      questions,
+      questions: processedQuestions,
       passingScore: passingScore || 70,
       timeLimit,
       attemptsAllowed: attemptsAllowed || (quizType === "final" ? 2 : 1),
+      instantFeedbackEnabled: instantFeedbackEnabled || false,
       isActive: true,
       createdBy: instructorId,
     });
@@ -494,6 +569,64 @@ const getUnreviewedAnswers = async (req, res) => {
   }
 };
 
+const getQuestionsForInstructors = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      subject,
+      difficulty,
+      tags,
+      search,
+    } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {};
+
+    if (subject && subject !== "all") filter.subject = subject;
+    if (difficulty && difficulty !== "all") filter.difficulty = difficulty;
+    if (tags) {
+      const tagArray = tags.split(",").map((tag) => tag.trim());
+      filter.tags = { $in: tagArray };
+    }
+    if (search) {
+      filter.$or = [
+        { questionText: { $regex: search, $options: "i" } },
+        { tags: { $in: [{ $regex: search, $options: "i" }] } },
+        { subject: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const questions = await QuestionBank.find(filter)
+      .populate("createdBy", "userName")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await QuestionBank.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        questions,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalQuestions: total,
+          hasNext: page * limit < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get questions for instructors error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch questions",
+    });
+  }
+};
+
 module.exports = {
   createQuiz,
   getQuizzesByCourse,
@@ -503,4 +636,5 @@ module.exports = {
   getQuizResults,
   reviewBroadTextAnswer,
   getUnreviewedAnswers,
+  getQuestionsForInstructors,
 };

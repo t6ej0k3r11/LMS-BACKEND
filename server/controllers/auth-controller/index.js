@@ -1,8 +1,8 @@
 const User = require("../../models/User");
 const PasswordResetToken = require("../../models/PasswordResetToken");
 const jwt = require("jsonwebtoken");
-const crypto = require('crypto');
-const { sendPasswordResetEmail } = require('../../utils/emailService');
+const crypto = require("crypto");
+const { sendPasswordResetEmail } = require("../../utils/emailService");
 
 // Password strength validation function
 const validatePasswordStrength = (password) => {
@@ -110,18 +110,30 @@ const registerUser = async (req, res) => {
       });
     }
 
+    // Set status based on role
+    let status = "approved";
+    if (role === "instructor") {
+      status = "pending";
+    }
+
     const newUser = new User({
       userName,
       userEmail,
       role,
+      status,
       password, // Password will be hashed by pre-save middleware
     });
 
     await newUser.save();
 
+    let message = "User registered successfully!";
+    if (role === "instructor") {
+      message = "Your instructor account is waiting for admin approval.";
+    }
+
     return res.status(201).json({
       success: true,
-      message: "User registered successfully!",
+      message,
     });
   } catch (error) {
     console.error("Registration error:", error);
@@ -175,6 +187,7 @@ const loginUser = async (req, res) => {
           userName: checkUser.userName,
           userEmail: checkUser.userEmail,
           role: checkUser.role,
+          status: checkUser.status,
         },
       },
     });
@@ -217,6 +230,7 @@ const refreshAccessToken = async (req, res) => {
         userName: user.userName,
         userEmail: user.userEmail,
         role: user.role,
+        status: user.status,
       },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
@@ -252,11 +266,11 @@ const requestPasswordReset = async (req, res) => {
   try {
     // Don't reveal if the email exists or not
     const user = await User.findOne({ userEmail: email.toLowerCase() });
-    
+
     if (user) {
       // Generate a reset token
       const token = await PasswordResetToken.generateToken();
-      
+
       // Save the token to the database
       await PasswordResetToken.create({
         userId: user._id,
@@ -271,7 +285,8 @@ const requestPasswordReset = async (req, res) => {
     // Always return success to prevent user enumeration
     res.status(200).json({
       success: true,
-      message: "If an account with that email exists, a password reset link has been sent",
+      message:
+        "If an account with that email exists, a password reset link has been sent",
     });
   } catch (error) {
     console.error("Password reset request error:", error);
@@ -305,7 +320,7 @@ const resetPassword = async (req, res) => {
 
   try {
     // Find the token
-    const resetToken = await PasswordResetToken.findOne({ 
+    const resetToken = await PasswordResetToken.findOne({
       token,
       used: false,
       expiresAt: { $gt: new Date() },
@@ -351,10 +366,38 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { 
-  registerUser, 
-  loginUser, 
-  refreshAccessToken, 
-  requestPasswordReset, 
-  resetPassword 
+const checkAuth = async (req, res) => {
+  try {
+    // Fetch fresh user data from database
+    const user = await User.findById(req.user._id).select("-password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Authenticated user!",
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    console.error("Check auth error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Authentication check failed",
+    });
+  }
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  refreshAccessToken,
+  requestPasswordReset,
+  resetPassword,
+  checkAuth,
 };

@@ -50,9 +50,9 @@ const getAllStudentViewCourses = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // Only show approved courses to students
+    // Only show approved and published courses to students
     filters.approvalStatus = "approved";
-    filters.isPublished = true;
+    filters.status = "published";
 
     const coursesList = await Course.find(filters)
       .sort(sortParam)
@@ -84,7 +84,11 @@ const getAllStudentViewCourses = async (req, res) => {
 const getStudentViewCourseDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const courseDetails = await Course.findById(id);
+    const courseDetails = await Course.findOne({
+      _id: id,
+      approvalStatus: "approved",
+      status: "published",
+    });
 
     if (!courseDetails) {
       return res.status(404).json({

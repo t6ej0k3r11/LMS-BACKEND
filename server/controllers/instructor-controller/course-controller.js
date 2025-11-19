@@ -9,8 +9,10 @@ const addNewCourse = async (req, res) => {
   try {
     const courseData = req.body;
 
-    // Set default approval status to pending for new courses
+    // Set default values
+    courseData.pricing = courseData.pricing || 0;
     courseData.approvalStatus = "pending";
+    courseData.status = "draft";
 
     const newlyCreatedCourse = new Course(courseData);
     const saveCourse = await newlyCreatedCourse.save();
@@ -105,6 +107,84 @@ const updateCourseByID = async (req, res) => {
   }
 };
 
+const publishCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const instructorId = req.user._id;
+
+    // Find the course and verify ownership
+    const course = await Course.findById(id);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found!",
+      });
+    }
+
+    // Check if the instructor owns this course
+    if (course.instructorId !== instructorId) {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have permission to publish this course!",
+      });
+    }
+
+    // Check if course is already published
+    if (course.status === "published") {
+      return res.status(400).json({
+        success: false,
+        message: "Course is already published!",
+      });
+    }
+
+    // Check admin approval (skip for draft courses in testing)
+    if (course.approvalStatus !== "approved" && course.status !== "draft") {
+      return res.status(400).json({
+        success: false,
+        message: "Course must be approved by admin before publishing!",
+      });
+    }
+
+    // Check required fields
+    const requiredFields = ["title", "description"];
+    const missingFields = requiredFields.filter(
+      (field) => !course[field] || course[field].trim() === ""
+    );
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
+    }
+
+    // Check if curriculum has at least one lesson
+    if (!course.curriculum || course.curriculum.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Course must have at least one lesson before publishing!",
+      });
+    }
+
+    // Publish the course
+    course.status = "published";
+    course.approvalStatus = "approved"; // Auto-approve when publishing draft
+    await course.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Course published successfully!",
+      data: course,
+    });
+  } catch (e) {
+    console.error("Error publishing course:", e);
+    res.status(500).json({
+      success: false,
+      message: "Some error occurred while publishing the course!",
+    });
+  }
+};
+
 const deleteCourseByID = async (req, res) => {
   try {
     const { id } = req.params;
@@ -169,5 +249,6 @@ module.exports = {
   getAllCourses,
   updateCourseByID,
   getCourseDetailsByID,
+  publishCourse,
   deleteCourseByID,
 };

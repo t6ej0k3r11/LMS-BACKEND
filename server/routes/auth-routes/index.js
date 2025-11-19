@@ -5,6 +5,7 @@ const {
   refreshAccessToken,
   requestPasswordReset,
   resetPassword,
+  checkAuth,
 } = require("../../controllers/auth-controller/index");
 const authenticateMiddleware = require("../../middleware/auth-middleware");
 const {
@@ -21,20 +22,14 @@ router.post("/login", validateLogin, loginUser);
 router.post("/refresh-token", refreshAccessToken);
 
 // Password reset routes
-router.post("/request-reset", validatePasswordResetRequest, requestPasswordReset);
+router.post(
+  "/request-reset",
+  validatePasswordResetRequest,
+  requestPasswordReset
+);
 router.post("/reset-password", validatePasswordReset, resetPassword);
 
 // Check authentication status
-router.get("/check-auth", authenticateMiddleware.authenticate, (req, res) => {
-  const user = req.user;
-
-  res.status(200).json({
-    success: true,
-    message: "Authenticated user!",
-    data: {
-      user,
-    },
-  });
-});
+router.get("/check-auth", authenticateMiddleware.authenticate, checkAuth);
 
 module.exports = router;

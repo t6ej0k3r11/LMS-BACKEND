@@ -2,13 +2,15 @@ const mongoose = require("mongoose");
 
 const AnswerSchema = new mongoose.Schema({
   questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
-  answer: { type: String, required: true },
+  selectedOption: { type: String }, // for instant feedback - the selected answer
+  answer: { type: String, required: true }, // keep for backward compatibility
   isCorrect: { type: Boolean }, // null for broad-text questions that need review
   pointsEarned: { type: Number, default: 0 },
   needsReview: { type: Boolean, default: false }, // true for broad-text questions
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // instructor who reviewed
   reviewDate: { type: Date },
   reviewNotes: { type: String },
+  evaluatedAt: { type: Date }, // timestamp when answer was evaluated (for instant feedback)
 });
 
 const QuizAttemptSchema = new mongoose.Schema(

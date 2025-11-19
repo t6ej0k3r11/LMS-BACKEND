@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Quiz = require("../../models/Quiz");
 const QuizAttempt = require("../../models/QuizAttempt");
+const QuestionBank = require("../../models/QuestionBank");
 const StudentCourses = require("../../models/StudentCourses");
 const CourseProgress = require("../../models/CourseProgress");
 const { updateQuizProgress } = require("./course-progress-controller");
@@ -94,10 +95,8 @@ const getQuizzesByCourse = async (req, res) => {
         // Lesson quiz - check if corresponding lecture is completed
         return (
           courseProgress &&
-          courseProgress.lecturesProgress.some(
-            (lp) =>
-              lp.lectureId.toString() === quiz.lectureId.toString() &&
-              lp.progressValue >= 1
+          courseProgress.completedLessons.some(
+            (lessonId) => lessonId.toString() === quiz.lectureId.toString()
           )
         );
       }
@@ -161,7 +160,9 @@ const getQuizById = async (req, res) => {
 
       if (
         !courseProgress ||
-        !courseProgress.isLectureCompleted(quiz.lectureId)
+        !courseProgress.completedLessons.some(
+          (lessonId) => lessonId.toString() === quiz.lectureId.toString()
+        )
       ) {
         return res.status(403).json({
           success: false,
@@ -178,6 +179,44 @@ const getQuizById = async (req, res) => {
       studentId,
     }).sort({ attemptNumber: 1 });
 
+    // Process questions - handle both custom and bank questions
+    const processedQuestions = [];
+    for (const q of quiz.questions) {
+      if (q.mode === "bank" && q.bankQuestionId) {
+        // Fetch bank question data
+        const bankQuestion = await QuestionBank.findById(q.bankQuestionId);
+        if (bankQuestion) {
+          processedQuestions.push({
+            _id: q._id,
+            mode: "bank",
+            bankQuestionId: q.bankQuestionId,
+            type: bankQuestion.type || "multiple-choice", // Default fallback
+            question: bankQuestion.questionText,
+            options: bankQuestion.options,
+            points: q.points || 1,
+            subject: bankQuestion.subject,
+            difficulty: bankQuestion.difficulty,
+            tags: bankQuestion.tags,
+          });
+        } else {
+          // Bank question not found, skip or add placeholder
+          console.warn(
+            `Bank question ${q.bankQuestionId} not found for quiz ${quizId}`
+          );
+        }
+      } else {
+        // Custom question
+        processedQuestions.push({
+          _id: q._id,
+          mode: "custom",
+          type: q.type,
+          question: q.question,
+          options: q.options,
+          points: q.points,
+        });
+      }
+    }
+
     // Return quiz without correct answers
     const quizForStudent = {
       _id: quiz._id,
@@ -185,13 +224,7 @@ const getQuizById = async (req, res) => {
       lectureId: quiz.lectureId,
       title: quiz.title,
       description: quiz.description,
-      questions: quiz.questions.map((q) => ({
-        _id: q._id,
-        type: q.type,
-        question: q.question,
-        options: q.options,
-        points: q.points,
-      })),
+      questions: processedQuestions,
       passingScore: quiz.passingScore,
       timeLimit: quiz.timeLimit,
       attemptsAllowed: quiz.attemptsAllowed,
@@ -266,10 +299,8 @@ const startQuizAttempt = async (req, res) => {
 
       if (
         !courseProgress ||
-        !courseProgress.lecturesProgress.some(
-          (lp) =>
-            lp.lectureId.toString() === quiz.lectureId.toString() &&
-            lp.progressValue >= 1
+        !courseProgress.completedLessons.some(
+          (lessonId) => lessonId.toString() === quiz.lectureId.toString()
         )
       ) {
         return res.status(403).json({
@@ -452,8 +483,8 @@ const submitQuizAttempt = async (req, res) => {
 
     // Calculate score
     let pointsEarned = 0;
-    const processedAnswers = answers
-      .map((answer) => {
+    const processedAnswers = await Promise.all(
+      answers.map(async (answer) => {
         const question = quiz.questions.id(answer.questionId);
         if (!question) {
           return null;
@@ -461,14 +492,35 @@ const submitQuizAttempt = async (req, res) => {
 
         let isCorrect = null;
         let points = 0;
+        let correctAnswer = "";
+        let questionType = question.type;
 
-        if (question.type === "broad-text") {
+        if (question.mode === "bank" && question.bankQuestionId) {
+          // Fetch bank question data for grading
+          const bankQuestion = await QuestionBank.findById(
+            question.bankQuestionId
+          );
+          if (bankQuestion) {
+            correctAnswer = bankQuestion.correctAnswer;
+            questionType = bankQuestion.type || "multiple-choice";
+          } else {
+            console.warn(
+              `Bank question ${question.bankQuestionId} not found for grading`
+            );
+            return null;
+          }
+        } else {
+          // Custom question
+          correctAnswer = question.correctAnswer;
+        }
+
+        if (questionType === "broad-text") {
           // Broad text questions need manual review - no points until reviewed
           isCorrect = null;
           points = 0;
         } else {
           // Automatic marking for multiple choice, true-false, etc.
-          isCorrect = question.correctAnswer === answer.answer;
+          isCorrect = correctAnswer === answer.answer;
           points = isCorrect ? question.points || 1 : 0;
           pointsEarned += points;
         }
@@ -478,10 +530,10 @@ const submitQuizAttempt = async (req, res) => {
           answer: answer.answer,
           isCorrect,
           pointsEarned: points,
-          needsReview: question.type === "broad-text",
+          needsReview: questionType === "broad-text",
         };
       })
-      .filter(Boolean);
+    );
 
     const totalPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
     // Calculate total points from auto-gradable questions only
@@ -600,18 +652,40 @@ const getQuizResults = async (req, res) => {
     let answers = [];
     if (latestAttempt) {
       // Build answers array with question details
-      answers = latestAttempt.answers.map((answer) => {
-        const question = quiz.questions.id(answer.questionId);
-        return {
-          questionId: answer.questionId,
-          question: question?.question || "Question not found",
-          userAnswer: answer.answer,
-          isCorrect: answer.isCorrect,
-          correctAnswer: question?.correctAnswer || "",
-          pointsEarned: answer.pointsEarned || 0,
-          needsReview: answer.needsReview || false,
-        };
-      });
+      answers = await Promise.all(
+        latestAttempt.answers.map(async (answer) => {
+          const question = quiz.questions.id(answer.questionId);
+          let questionText = "Question not found";
+          let correctAnswer = "";
+
+          if (question) {
+            if (question.mode === "bank" && question.bankQuestionId) {
+              // Fetch bank question data
+              const bankQuestion = await QuestionBank.findById(
+                question.bankQuestionId
+              );
+              if (bankQuestion) {
+                questionText = bankQuestion.questionText;
+                correctAnswer = bankQuestion.correctAnswer;
+              }
+            } else {
+              // Custom question
+              questionText = question.question;
+              correctAnswer = question.correctAnswer || "";
+            }
+          }
+
+          return {
+            questionId: answer.questionId,
+            question: questionText,
+            userAnswer: answer.answer,
+            isCorrect: answer.isCorrect,
+            correctAnswer: correctAnswer,
+            pointsEarned: answer.pointsEarned || 0,
+            needsReview: answer.needsReview || false,
+          };
+        })
+      );
     }
 
     // For final quiz, show required score
@@ -651,10 +725,356 @@ const getQuizResults = async (req, res) => {
   }
 };
 
+const submitQuestionAnswer = async (req, res) => {
+  try {
+    const { quizId, attemptId, questionId } = req.params;
+    const { answer } = req.body;
+    const studentId = req.user._id;
+
+    // Validate parameters
+    if (
+      !quizId ||
+      !attemptId ||
+      !questionId ||
+      !mongoose.Types.ObjectId.isValid(quizId) ||
+      !mongoose.Types.ObjectId.isValid(attemptId) ||
+      !mongoose.Types.ObjectId.isValid(questionId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz, attempt, or question ID format",
+      });
+    }
+
+    if (!answer || typeof answer !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Answer must be provided as a string",
+      });
+    }
+
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz not found",
+      });
+    }
+
+    // Check if instant feedback is enabled
+    if (!quiz.instantFeedbackEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "Instant feedback is not enabled for this quiz",
+      });
+    }
+
+    // Check if student has purchased the course
+    const studentCourses = await StudentCourses.findOne({
+      userId: studentId,
+      "courses.courseId": quiz.courseId,
+    });
+
+    if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const attempt = await QuizAttempt.findById(attemptId);
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz attempt not found",
+      });
+    }
+
+    // Verify ownership
+    if (
+      attempt.studentId.toString() !== studentId ||
+      attempt.quizId.toString() !== quizId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Invalid attempt ownership.",
+      });
+    }
+
+    // Check if attempt is still in progress
+    if (attempt.status !== "in_progress") {
+      return res.status(400).json({
+        success: false,
+        message: "Quiz attempt is not in progress",
+      });
+    }
+
+    // Find the question
+    const question = quiz.questions.id(questionId);
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found",
+      });
+    }
+
+    // Check if question is already answered
+    const existingAnswerIndex = attempt.answers.findIndex(
+      (ans) => ans.questionId.toString() === questionId
+    );
+
+    if (existingAnswerIndex !== -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Question has already been answered",
+      });
+    }
+
+    // Get question details for evaluation
+    let correctAnswer = "";
+    let questionType = question.type;
+    let explanation = "";
+
+    if (question.mode === "bank" && question.bankQuestionId) {
+      // Fetch bank question data
+      const bankQuestion = await QuestionBank.findById(question.bankQuestionId);
+      if (bankQuestion) {
+        correctAnswer = bankQuestion.correctAnswer;
+        questionType = bankQuestion.type || "multiple-choice";
+        explanation = bankQuestion.explanation || "";
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Question data not found",
+        });
+      }
+    } else {
+      // Custom question
+      correctAnswer = question.correctAnswer || "";
+      explanation = question.explanation || "";
+    }
+
+    // Evaluate the answer
+    let isCorrect = null;
+    let pointsEarned = 0;
+
+    if (questionType === "broad-text") {
+      // Broad text questions need manual review
+      isCorrect = null;
+      pointsEarned = 0;
+    } else {
+      // Automatic marking for multiple choice, true-false, etc.
+      isCorrect = correctAnswer === answer;
+      pointsEarned = isCorrect ? question.points || 1 : 0;
+    }
+
+    // Create answer object
+    const answerObj = {
+      questionId,
+      selectedOption: answer,
+      answer,
+      isCorrect,
+      pointsEarned,
+      needsReview: questionType === "broad-text",
+      evaluatedAt: new Date(),
+    };
+
+    // Add answer to attempt
+    attempt.answers.push(answerObj);
+
+    // Update points earned
+    attempt.pointsEarned += pointsEarned;
+
+    // Calculate current score (only for auto-gradable questions)
+    const autoGradableAnswers = attempt.answers.filter(
+      (ans) => !ans.needsReview
+    );
+    const totalAutoGradablePoints = quiz.questions
+      .filter((q) => q.type !== "broad-text")
+      .reduce((sum, q) => sum + q.points, 0);
+
+    if (totalAutoGradablePoints > 0) {
+      attempt.score = Math.round(
+        (attempt.pointsEarned / totalAutoGradablePoints) * 100
+      );
+    }
+
+    await attempt.save();
+
+    // Prepare response
+    const response = {
+      isCorrect,
+      correctAnswer: correctAnswer,
+      explanation: explanation || null,
+      pointsEarned,
+      currentScore: attempt.score,
+      totalQuestions: quiz.questions.length,
+      answeredQuestions: attempt.answers.length,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: "Answer submitted successfully",
+      data: response,
+    });
+  } catch (e) {
+    console.error("Error submitting question answer:", e);
+    res.status(500).json({
+      success: false,
+      message: "Failed to submit answer. Please try again.",
+    });
+  }
+};
+
+const finalizeQuizAttempt = async (req, res) => {
+  try {
+    const { quizId, attemptId } = req.params;
+    const studentId = req.user._id;
+
+    // Validate parameters
+    if (
+      !quizId ||
+      !attemptId ||
+      !mongoose.Types.ObjectId.isValid(quizId) ||
+      !mongoose.Types.ObjectId.isValid(attemptId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz or attempt ID format",
+      });
+    }
+
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz not found",
+      });
+    }
+
+    // Check if instant feedback is enabled
+    if (!quiz.instantFeedbackEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "Instant feedback is not enabled for this quiz",
+      });
+    }
+
+    // Check if student has purchased the course
+    const studentCourses = await StudentCourses.findOne({
+      userId: studentId,
+      "courses.courseId": quiz.courseId,
+    });
+
+    if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const attempt = await QuizAttempt.findById(attemptId);
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz attempt not found",
+      });
+    }
+
+    // Verify ownership
+    if (
+      attempt.studentId.toString() !== studentId ||
+      attempt.quizId.toString() !== quizId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Invalid attempt ownership.",
+      });
+    }
+
+    // Check if attempt is still in progress
+    if (attempt.status !== "in_progress") {
+      return res.status(400).json({
+        success: false,
+        message: "Quiz attempt is not in progress",
+      });
+    }
+
+    // Check if all questions are answered
+    if (attempt.answers.length !== quiz.questions.length) {
+      return res.status(400).json({
+        success: false,
+        message: "All questions must be answered before finalizing the quiz",
+      });
+    }
+
+    // Finalize the attempt
+    const completedAt = new Date();
+    const timeSpent = Math.floor((completedAt - attempt.startedAt) / 1000);
+
+    // Calculate final score - bank questions are already handled in the attempt.pointsEarned
+    const totalPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
+    const score = Math.round((attempt.pointsEarned / totalPoints) * 100);
+    const passed = score >= quiz.passingScore;
+
+    attempt.completedAt = completedAt;
+    attempt.timeSpent = timeSpent;
+    attempt.score = score;
+    attempt.passed = passed;
+    attempt.status = "completed";
+
+    await attempt.save();
+
+    // Update quiz progress in course progress
+    try {
+      await updateQuizProgress(
+        {
+          body: {
+            userId: studentId,
+            courseId: quiz.courseId.toString(),
+            quizId: quizId,
+            score,
+            passed,
+          },
+        },
+        {
+          status: () => ({ json: () => {} }),
+        }
+      );
+    } catch (progressError) {
+      console.error("Error updating quiz progress:", progressError);
+      // Don't fail the quiz finalization if progress update fails
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Quiz finalized successfully",
+      data: {
+        score,
+        pointsEarned: attempt.pointsEarned,
+        totalPoints,
+        passed,
+        timeSpent,
+        courseId: quiz.courseId,
+      },
+    });
+  } catch (e) {
+    console.error("Error finalizing quiz attempt:", e);
+    res.status(500).json({
+      success: false,
+      message: "Failed to finalize quiz. Please try again.",
+    });
+  }
+};
+
 module.exports = {
   getQuizzesByCourse,
   getQuizById,
   startQuizAttempt,
   submitQuizAttempt,
+  submitQuestionAnswer,
+  finalizeQuizAttempt,
   getQuizResults,
 };

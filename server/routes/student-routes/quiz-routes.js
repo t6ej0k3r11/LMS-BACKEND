@@ -4,6 +4,8 @@ const {
   getQuizById,
   startQuizAttempt,
   submitQuizAttempt,
+  submitQuestionAnswer,
+  finalizeQuizAttempt,
   getQuizResults,
 } = require("../../controllers/student-controller/quiz-controller");
 const { authenticate, authorize } = require("../../middleware/auth-middleware");
@@ -26,12 +28,21 @@ router.get("/:quizId", getQuizById);
 // POST /:quizId/attempt - start quiz attempt
 router.post("/:quizId/attempt", startQuizAttempt);
 
-// PUT /:quizId/attempt/:attemptId - submit quiz
+// PUT /:quizId/attempt/:attemptId - submit quiz (legacy for non-instant feedback)
 router.put(
   "/:quizId/attempt/:attemptId",
   validateQuizSubmission,
   submitQuizAttempt
 );
+
+// POST /:quizId/attempt/:attemptId/question/:questionId - submit individual question answer (instant feedback)
+router.post(
+  "/:quizId/attempt/:attemptId/question/:questionId",
+  submitQuestionAnswer
+);
+
+// POST /:quizId/attempt/:attemptId/finalize - finalize quiz attempt (instant feedback)
+router.post("/:quizId/attempt/:attemptId/finalize", finalizeQuizAttempt);
 
 // GET /:quizId/results - get quiz results
 router.get("/:quizId/results", getQuizResults);
