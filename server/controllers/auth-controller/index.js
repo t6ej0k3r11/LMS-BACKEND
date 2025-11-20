@@ -115,10 +115,11 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Set status based on role
-    let status = "approved";
+    // Set status and instructorStatus based on role
+    let status = "active";
+    let instructorStatus;
     if (role === "instructor") {
-      status = "pending";
+      instructorStatus = "pending";
     }
 
     const newUser = new User({
@@ -126,6 +127,7 @@ const registerUser = async (req, res) => {
       userEmail,
       role,
       status,
+      instructorStatus,
       password, // Password will be hashed by pre-save middleware
     });
 
@@ -199,6 +201,7 @@ const loginUser = async (req, res) => {
           userEmail: checkUser.userEmail,
           role: checkUser.role,
           status: checkUser.status,
+          instructorStatus: checkUser.instructorStatus,
         },
       },
     });

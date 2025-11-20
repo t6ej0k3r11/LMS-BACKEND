@@ -10,6 +10,8 @@ const {
   bulkUserAction,
   getPendingCourses,
   reviewCourse,
+  approveCourse,
+  rejectCourse,
   getAuditLogs,
   getAdminStats,
   getRecentActivities,
@@ -44,6 +46,10 @@ router.delete("/courses/:courseId", deleteCourse);
 // Course approval routes (legacy)
 router.get("/courses/pending", getPendingCourses);
 router.post("/courses/:courseId/review", reviewCourse);
+
+// New course approval routes
+router.patch("/courses/:id/approve", approveCourse);
+router.patch("/courses/:id/reject", rejectCourse);
 
 // Dashboard routes
 router.get("/stats", getAdminStats);

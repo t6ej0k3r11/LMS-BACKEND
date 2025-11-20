@@ -6,59 +6,51 @@ const Quiz = require("../../models/Quiz");
 const QuizAttempt = require("../../models/QuizAttempt");
 
 // Helper function to calculate overall course progress
-const calculateOverallProgress = async (progress, courseId) => {
-  try {
-    // Get all quizzes for the course
-    const quizzes = await Quiz.find({ courseId });
-    const totalQuizzes = quizzes.length;
+const calculateOverallProgress = async (userId, courseId) => {
+  const course = await Course.findById(courseId).populate("lessons quizzes");
+  const progress = await UserCourseProgress.findOne({ userId, courseId });
 
-    // Get completed quiz attempts for this user and course
-    const completedQuizAttempts = await QuizAttempt.find({
-      courseId,
-      studentId: progress.userId,
-      passed: true,
-      status: "completed",
-    });
-
-    const completedQuizzesCount = completedQuizAttempts.length;
-
-    // Update completed quizzes in progress
-    progress.completedQuizzes = completedQuizAttempts.map(
-      (attempt) => attempt.quizId
-    );
-
-    // Calculate weights: videos 50%, quizzes 50%
-    const videoWeight = 0.5;
-    const quizWeight = 0.5;
-
-    const videoProgress = progress.videoProgressPercentage || 0;
-    const quizProgress =
-      totalQuizzes > 0 ? (completedQuizzesCount / totalQuizzes) * 100 : 100;
-
-    progress.overallProgressPercentage = Math.round(
-      videoProgress * videoWeight + quizProgress * quizWeight
-    );
-
-    // Check if course is completed
-    const allVideosCompleted = progress.videoProgressPercentage >= 100;
-    const allQuizzesCompleted = completedQuizzesCount === totalQuizzes;
-
-    if (allVideosCompleted && allQuizzesCompleted && !progress.isCompleted) {
-      progress.isCompleted = true;
-      progress.completionDate = new Date();
-    }
-
-    return progress;
-  } catch (error) {
-    console.error("Error calculating overall progress:", error);
-    return progress;
+  if (!progress) {
+    throw new Error("Progress not found");
   }
+
+  const totalLessons = course.lessons?.length || course.curriculum.length;
+  const completedLessons = Object.values(progress.lectures || {}).filter(
+    (s) => s === "completed"
+  ).length;
+
+  const totalQuizzes =
+    course.quizzes?.length || (await Quiz.find({ courseId })).length;
+  const completedQuizzes = Object.values(progress.quizzes || {}).filter(
+    (s) => s === "completed"
+  ).length;
+
+  const totalItems = totalLessons + totalQuizzes;
+  const completedItems = completedLessons + completedQuizzes;
+
+  const progressPercentage =
+    totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
+
+  // ✅ Set isCompleted if everything is done
+  const isCompleted = completedItems === totalItems;
+
+  progress.percentage = progressPercentage;
+  progress.isCompleted = isCompleted;
+
+  if (isCompleted && !progress.completionDate) {
+    progress.completionDate = new Date();
+  }
+
+  await progress.save();
+
+  return progress;
 };
 
 //mark current lecture as viewed (add to completedLessons)
 const markCurrentLectureAsViewed = async (req, res) => {
   try {
-    const { userId, courseId, lectureId, isRewatch } = req.body;
+    const { courseId, lectureId, isRewatch } = req.body;
+    const userId = req.user._id;
 
     let progress = await UserCourseProgress.findOne({ userId, courseId });
     if (!progress) {
@@ -69,11 +61,14 @@ const markCurrentLectureAsViewed = async (req, res) => {
         videoProgressPercentage: 0,
         overallProgressPercentage: 0,
       });
-    } else {
-      // Add lessonId to completedLessons if not already present (idempotent)
-      if (!progress.completedLessons.includes(lectureId)) {
-        progress.completedLessons.push(lectureId);
-      }
+    }
+
+    // Mark lecture as completed in the map
+    progress.lectures.set(lectureId, "completed");
+
+    // Add to completedLessons for backward compatibility
+    if (!progress.completedLessons.includes(lectureId)) {
+      progress.completedLessons.push(lectureId);
     }
 
     // Recalculate video progress percentage
@@ -91,10 +86,7 @@ const markCurrentLectureAsViewed = async (req, res) => {
     );
 
     // Calculate overall progress (videos + quizzes)
-    await calculateOverallProgress(progress, courseId);
-
-    progress.lastUpdated = new Date();
-    await progress.save();
+    progress = await calculateOverallProgress(userId, courseId);
 
     res.status(200).json({
       success: true,
@@ -114,7 +106,8 @@ const markCurrentLectureAsViewed = async (req, res) => {
 //get current course progress (legacy - for backward compatibility)
 const getCurrentCourseProgress = async (req, res) => {
   try {
-    const { userId, courseId } = req.params;
+    const { courseId } = req.params;
+    const userId = req.user._id;
 
     const studentPurchasedCourses = await StudentCourses.findOne({ userId });
 
@@ -171,7 +164,7 @@ const getCurrentCourseProgress = async (req, res) => {
     );
 
     // Calculate overall progress for backward compatibility
-    await calculateOverallProgress(currentUserCourseProgress, courseId);
+    await calculateOverallProgress(userId, courseId);
 
     res.status(200).json({
       success: true,
@@ -181,7 +174,9 @@ const getCurrentCourseProgress = async (req, res) => {
         quizzesProgress: [], // Keep for backward compatibility
         completed: currentUserCourseProgress.isCompleted,
         completionDate: currentUserCourseProgress.completionDate,
-        progressPercentage: currentUserCourseProgress.overallProgressPercentage, // Overall progress
+        progressPercentage:
+          currentUserCourseProgress.percentage ||
+          currentUserCourseProgress.overallProgressPercentage, // Overall progress
         videoProgressPercentage:
           currentUserCourseProgress.videoProgressPercentage, // Video-only progress
         isPurchased: true,
@@ -229,16 +224,18 @@ const getUserCourseProgress = async (req, res) => {
     }
 
     // Ensure overall progress is calculated
-    await calculateOverallProgress(progress, courseId);
-    await progress.save();
+    progress = await calculateOverallProgress(userId, courseId);
 
     res.status(200).json({
       success: true,
       data: {
         completedLessons: progress.completedLessons,
         completedQuizzes: progress.completedQuizzes,
+        lectures: Object.fromEntries(progress.lectures),
+        quizzes: Object.fromEntries(progress.quizzes),
         videoProgressPercentage: progress.videoProgressPercentage,
-        overallProgressPercentage: progress.overallProgressPercentage,
+        overallProgressPercentage:
+          progress.percentage || progress.overallProgressPercentage,
         isCompleted: progress.isCompleted,
         completionDate: progress.completionDate,
         lastUpdated: progress.lastUpdated,
@@ -255,14 +252,35 @@ const getUserCourseProgress = async (req, res) => {
 //reset course progress
 const resetCurrentCourseProgress = async (req, res) => {
   try {
-    const { userId, courseId } = req.body;
+    const studentId = req.user._id;
+    const { courseId } = req.body;
 
-    const progress = await UserCourseProgress.findOne({ userId, courseId });
+    // Check if the student has purchased the course
+    const studentPurchasedCourses = await StudentCourses.findOne({
+      userId: studentId,
+    });
+    const isCurrentCoursePurchasedByCurrentUserOrNot =
+      studentPurchasedCourses?.courses?.findIndex(
+        (item) => item.courseId === courseId
+      ) > -1;
+
+    if (!isCurrentCoursePurchasedByCurrentUserOrNot) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to reset this course.",
+      });
+    }
+
+    // Enforce ownership: validate that a course-progress record exists for (studentId, courseId)
+    const progress = await UserCourseProgress.findOne({
+      userId: studentId,
+      courseId,
+    });
 
     if (!progress) {
-      return res.status(404).json({
+      return res.status(403).json({
         success: false,
-        message: "Progress not found!",
+        message: "Not authorized to reset this course.",
       });
     }
 
@@ -290,10 +308,8 @@ const resetCurrentCourseProgress = async (req, res) => {
 };
 
 // Update quiz progress when a quiz is completed
-const updateQuizProgress = async (req, res) => {
+const updateQuizProgress = async (userId, courseId, quizId, score, passed) => {
   try {
-    const { userId, courseId, quizId, score, passed } = req.body;
-
     let progress = await UserCourseProgress.findOne({ userId, courseId });
 
     if (!progress) {
@@ -306,32 +322,52 @@ const updateQuizProgress = async (req, res) => {
       });
     }
 
-    // Add quiz to completed quizzes if not already present and passed
+    // Mark quiz as completed in the map if passed
+    if (passed) {
+      progress.quizzes.set(quizId, "completed");
+    }
+
+    // Add to completedQuizzes for backward compatibility
     if (passed && !progress.completedQuizzes.includes(quizId)) {
       progress.completedQuizzes.push(quizId);
     }
 
     // Calculate overall progress
-    await calculateOverallProgress(progress, courseId);
+    progress = await calculateOverallProgress(userId, courseId);
 
-    progress.lastUpdated = new Date();
-    await progress.save();
-
-    if (res) {
-      res.status(200).json({
-        success: true,
-        message: "Quiz progress updated",
-        data: progress,
-      });
-    }
+    return progress;
   } catch (error) {
     console.error("Error updating quiz progress:", error);
-    if (res) {
-      res.status(500).json({
-        success: false,
-        message: "Some error occured!",
-      });
+    throw error;
+  }
+};
+
+// Update lecture progress (auto-save)
+const updateLectureProgress = async (req, res) => {
+  try {
+    const studentId = req.user._id; // Use authenticated user only
+    const { courseId, lectureId, status = "completed" } = req.body;
+
+    if (!courseId || !lectureId) {
+      return res
+        .status(400)
+        .json({ message: "courseId and lectureId are required" });
     }
+
+    // Find or create the course progress document
+    const progress = await UserCourseProgress.findOneAndUpdate(
+      { userId: studentId, courseId },
+      { $set: { [`lectures.${lectureId}`]: status } },
+      { new: true, upsert: true }
+    );
+
+    return res.status(200).json({
+      message: "Lecture progress updated successfully",
+      progress,
+    });
+  } catch (error) {
+    console.error("Lecture progress update error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -341,4 +377,5 @@ module.exports = {
   getUserCourseProgress,
   resetCurrentCourseProgress,
   updateQuizProgress,
+  updateLectureProgress,
 };

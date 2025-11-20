@@ -28,7 +28,7 @@ const checkInstructorApproved = async (req, res, next) => {
     }
 
     // Check if instructor is approved
-    if (user.status !== "approved") {
+    if (user.instructorStatus !== "approved") {
       return res.status(403).json({
         success: false,
         message: "Instructor account is pending approval",

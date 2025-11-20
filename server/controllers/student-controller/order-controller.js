@@ -15,37 +15,66 @@ const createOrder = async (req, res) => {
       orderDate,
       paymentId,
       payerId,
-      instructorId,
-      instructorName,
-      courseImage,
-      courseTitle,
       courseId,
       coursePricing,
     } = req.body;
+    // Fetch course from DB for validation
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-    // Check if user is already enrolled and not completed
+    const isFreeCourse = course.pricing === 0;
+
+    if (!isFreeCourse) {
+      if (course.pricing !== coursePricing) {
+        return res.status(400).json({ message: "Invalid course price" });
+      }
+      // Verify payment status (simulated for this implementation)
+      const paymentConfirmed = true; // Assuming simulated payment is confirmed
+      if (!paymentConfirmed) {
+        return res.status(402).json({ message: "Payment required" });
+      }
+    } else {
+      if (coursePricing !== 0) {
+        return res
+          .status(400)
+          .json({ message: "Invalid course price for free course" });
+      }
+    }
+
+    // Log enrollment attempt for auditing
+    console.log(`Enrollment attempt for course ${courseId} by user ${userId}`);
+
+    // Use validated course data
+    const instructorId = course.instructorId;
+    const instructorName = course.instructorName;
+    const courseTitle = course.title;
+    const courseImage = course.image;
+
+    // Check if user has already completed this course (for paid courses only)
     const studentCourses = await StudentCourses.findOne({ userId });
     const enrolledCourse = studentCourses?.courses?.find(
       (course) => course.courseId === courseId
     );
-    if (enrolledCourse) {
+    if (enrolledCourse && course.pricing > 0) {
       const CourseProgress = require("../../models/CourseProgress");
       const progress = await CourseProgress.findOne({
         userId,
         courseId,
       });
-      const completed = progress?.completed || false;
-      if (!completed) {
+      if (progress && progress.isCompleted) {
         return res.status(400).json({
           success: false,
-          message: "You are already enrolled in this course.",
+          message: "You have already completed this course.",
         });
       }
-      // If completed, allow re-enrollment
+      // For paid courses, allow re-enrollment if not completed
     }
+    // For free courses, allow enrollment even if completed
 
     // For free courses, skip PayPal and directly enroll
-    if (paymentMethod === "free" && coursePricing === 0) {
+    if (isFreeCourse) {
       const newlyCreatedCourseOrder = new Order({
         userId,
         userName,

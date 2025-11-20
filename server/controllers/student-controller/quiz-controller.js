@@ -6,6 +6,20 @@ const StudentCourses = require("../../models/StudentCourses");
 const CourseProgress = require("../../models/CourseProgress");
 const { updateQuizProgress } = require("./course-progress-controller");
 
+// Helper function to validate quiz questions
+const validateQuizQuestions = async (quiz) => {
+  const missingQuestions = [];
+  for (const q of quiz.questions) {
+    if (q.mode === "bank" && q.bankQuestionId) {
+      const bankQuestion = await QuestionBank.findById(q.bankQuestionId);
+      if (!bankQuestion) {
+        missingQuestions.push(q.bankQuestionId);
+      }
+    }
+  }
+  return missingQuestions;
+};
+
 const getQuizzesByCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -84,19 +98,43 @@ const getQuizzesByCourse = async (req, res) => {
           as: "attempts",
         },
       },
+      {
+        $project: {
+          _id: 1,
+          courseId: 1,
+          prerequisiteLectureIds: 1,
+          quizType: 1,
+          title: 1,
+          description: 1,
+          passingScore: 1,
+          timeLimit: 1,
+          attemptsAllowed: 1,
+          instantFeedbackEnabled: 1,
+          isActive: 1,
+          isValid: 1,
+          createdBy: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          attempts: 1,
+        },
+      },
     ]);
 
     // Filter quizzes based on prerequisites
     const availableQuizzes = quizzesWithAttempts.filter((quiz) => {
-      if (!quiz.lectureId) {
-        // Final quiz - always available after enrollment
+      if (
+        !quiz.prerequisiteLectureIds ||
+        quiz.prerequisiteLectureIds.length === 0
+      ) {
+        // Final quiz or no prerequisites - always available after enrollment
         return true;
       } else {
-        // Lesson quiz - check if corresponding lecture is completed
+        // Check if all prerequisite lectures are completed
         return (
           courseProgress &&
-          courseProgress.completedLessons.some(
-            (lessonId) => lessonId.toString() === quiz.lectureId.toString()
+          quiz.prerequisiteLectureIds.every(
+            (lectureId) =>
+              courseProgress.lectures.get(lectureId.toString()) === "completed"
           )
         );
       }
@@ -137,6 +175,18 @@ const getQuizById = async (req, res) => {
       });
     }
 
+    // Validate questions
+    const missingQuestions = await validateQuizQuestions(quiz);
+    if (missingQuestions.length > 0) {
+      // Mark quiz as invalid
+      await Quiz.findByIdAndUpdate(quizId, { isValid: false });
+      return res.status(400).json({
+        success: false,
+        message:
+          "Quiz contains missing questions. Please contact the instructor to fix the quiz.",
+      });
+    }
+
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId,
@@ -151,27 +201,27 @@ const getQuizById = async (req, res) => {
     }
 
     // Check prerequisites for quiz access
-    if (quiz.lectureId) {
-      // Lesson quiz - check if corresponding lecture is completed
+    if (quiz.prerequisiteLectureIds && quiz.prerequisiteLectureIds.length > 0) {
       const courseProgress = await CourseProgress.findOne({
         userId: studentId,
         courseId: quiz.courseId,
       });
 
-      if (
-        !courseProgress ||
-        !courseProgress.completedLessons.some(
-          (lessonId) => lessonId.toString() === quiz.lectureId.toString()
-        )
-      ) {
+      const allPrereqsCompleted = quiz.prerequisiteLectureIds.every(
+        (lectureId) =>
+          courseProgress &&
+          courseProgress.lectures.get(lectureId.toString()) === "completed"
+      );
+
+      if (!allPrereqsCompleted) {
         return res.status(403).json({
           success: false,
           message:
-            "You must complete the corresponding lecture before attempting this quiz.",
+            "You must complete all prerequisite lectures before attempting this quiz.",
         });
       }
     }
-    // Final quiz - no prerequisites required beyond course enrollment
+    // No prerequisites required beyond course enrollment
 
     // Get existing attempts for this student and quiz
     const attempts = await QuizAttempt.find({
@@ -221,7 +271,7 @@ const getQuizById = async (req, res) => {
     const quizForStudent = {
       _id: quiz._id,
       courseId: quiz.courseId,
-      lectureId: quiz.lectureId,
+      prerequisiteLectureIds: quiz.prerequisiteLectureIds,
       title: quiz.title,
       description: quiz.description,
       questions: processedQuestions,
@@ -242,6 +292,12 @@ const getQuizById = async (req, res) => {
           completedAt: attempt.completedAt,
           score: attempt.score,
           passed: attempt.passed,
+          ...(attempt.status === "in_progress" && {
+            answers: attempt.answers.map((a) => ({
+              questionId: a.questionId,
+              answer: a.answer,
+            })),
+          }),
         })),
       },
     });
@@ -276,6 +332,18 @@ const startQuizAttempt = async (req, res) => {
       });
     }
 
+    // Validate questions
+    const missingQuestions = await validateQuizQuestions(quiz);
+    if (missingQuestions.length > 0) {
+      // Mark quiz as invalid
+      await Quiz.findByIdAndUpdate(quizId, { isValid: false });
+      return res.status(400).json({
+        success: false,
+        message:
+          "Quiz contains missing questions. Please contact the instructor to fix the quiz.",
+      });
+    }
+
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId,
@@ -290,27 +358,27 @@ const startQuizAttempt = async (req, res) => {
     }
 
     // Check prerequisites for quiz access
-    if (quiz.lectureId) {
-      // Lesson quiz - check if corresponding lecture is completed
+    if (quiz.prerequisiteLectureIds && quiz.prerequisiteLectureIds.length > 0) {
       const courseProgress = await CourseProgress.findOne({
         userId: studentId,
         courseId: quiz.courseId,
       });
 
-      if (
-        !courseProgress ||
-        !courseProgress.completedLessons.some(
-          (lessonId) => lessonId.toString() === quiz.lectureId.toString()
-        )
-      ) {
+      const allPrereqsCompleted = quiz.prerequisiteLectureIds.every(
+        (lectureId) =>
+          courseProgress &&
+          courseProgress.lectures.get(lectureId.toString()) === "completed"
+      );
+
+      if (!allPrereqsCompleted) {
         return res.status(403).json({
           success: false,
           message:
-            "You must complete the corresponding lecture before attempting this quiz.",
+            "You must complete all prerequisite lectures before attempting this quiz.",
         });
       }
     }
-    // Final quiz - no prerequisites required beyond course enrollment
+    // No prerequisites required beyond course enrollment
 
     // Count only completed attempts toward the limit
     const completedAttemptsCount = await QuizAttempt.countDocuments({
@@ -363,6 +431,7 @@ const startQuizAttempt = async (req, res) => {
       totalPoints: quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0),
       pointsEarned: 0,
       passed: false,
+      status: "in_progress",
       startedAt,
       completedAt: startedAt, // Will be updated on submit
       timeSpent: 0,
@@ -424,6 +493,18 @@ const submitQuizAttempt = async (req, res) => {
       });
     }
 
+    // Validate questions
+    const missingQuestions = await validateQuizQuestions(quiz);
+    if (missingQuestions.length > 0) {
+      // Mark quiz as invalid
+      await Quiz.findByIdAndUpdate(quizId, { isValid: false });
+      return res.status(400).json({
+        success: false,
+        message:
+          "Quiz contains missing questions. Please contact the instructor to fix the quiz.",
+      });
+    }
+
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId,
@@ -465,7 +546,8 @@ const submitQuizAttempt = async (req, res) => {
       },
       {
         $set: {
-          status: "processing", // Temporary status to lock the attempt
+          status: "in_progress",
+          isLocked: true, // Temporary lock to indicate processing
         },
       },
       { new: true }
@@ -562,23 +644,17 @@ const submitQuizAttempt = async (req, res) => {
       completedAt,
       timeSpent,
       status: "completed",
+      isLocked: false, // Unlock after processing
     });
 
     // Update quiz progress in course progress
     try {
       await updateQuizProgress(
-        {
-          body: {
-            userId: studentId,
-            courseId: quiz.courseId.toString(),
-            quizId: quizId,
-            score,
-            passed,
-          },
-        },
-        {
-          status: () => ({ json: () => {} }),
-        }
+        studentId,
+        quiz.courseId.toString(),
+        quizId,
+        score,
+        passed
       );
     } catch (progressError) {
       console.error("Error updating quiz progress:", progressError);
@@ -602,6 +678,151 @@ const submitQuizAttempt = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to submit quiz. Please try again.",
+    });
+  }
+};
+
+const validateQuizAccess = async (req, res) => {
+  try {
+    const { quizId } = req.params;
+    const studentId = req.user._id;
+
+    // Validate quizId format
+    if (!quizId || !mongoose.Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({
+        success: false,
+        canStart: false,
+        message: "Invalid quiz ID format",
+      });
+    }
+
+    const quiz = await Quiz.findById(quizId);
+
+    if (!quiz || quiz.isActive === false) {
+      return res.status(404).json({
+        success: false,
+        canStart: false,
+        message: "Quiz not found or inactive",
+      });
+    }
+
+    // Validate questions
+    const missingQuestions = await validateQuizQuestions(quiz);
+    if (missingQuestions.length > 0) {
+      // Mark quiz as invalid
+      await Quiz.findByIdAndUpdate(quizId, { isValid: false });
+      return res.status(400).json({
+        success: false,
+        canStart: false,
+        message:
+          "Quiz contains missing questions. Please contact the instructor to fix the quiz.",
+      });
+    }
+
+    // Check if student has purchased the course
+    const studentCourses = await StudentCourses.findOne({
+      userId: studentId,
+      "courses.courseId": quiz.courseId,
+    });
+
+    if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        canStart: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    // Check prerequisites for quiz access
+    if (quiz.prerequisiteLectureIds && quiz.prerequisiteLectureIds.length > 0) {
+      const courseProgress = await CourseProgress.findOne({
+        userId: studentId,
+        courseId: quiz.courseId,
+      });
+
+      const allPrereqsCompleted = quiz.prerequisiteLectureIds.every(
+        (lectureId) =>
+          courseProgress &&
+          courseProgress.lectures.get(lectureId.toString()) === "completed"
+      );
+
+      if (!allPrereqsCompleted) {
+        return res.status(403).json({
+          success: false,
+          canStart: false,
+          message:
+            "You must complete all prerequisite lectures before attempting this quiz.",
+        });
+      }
+    }
+
+    // Get existing attempts for this student and quiz
+    const attempts = await QuizAttempt.find({
+      quizId,
+      studentId,
+    }).sort({ attemptNumber: 1 });
+
+    // Check if quiz has questions
+    if (!quiz.questions || quiz.questions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        canStart: false,
+        message: "This quiz has no questions. Please contact your instructor.",
+      });
+    }
+
+    // Determine if we should resume an existing attempt
+    let resumeAttemptId = null;
+    let resumeReason = null;
+
+    // Check for in-progress attempt
+    const inProgressAttempt = attempts.find(
+      (attempt) => attempt.status === "in_progress"
+    );
+    if (inProgressAttempt) {
+      resumeAttemptId = inProgressAttempt._id;
+      resumeReason = "You have an active attempt. Resuming now.";
+    }
+
+    res.status(200).json({
+      success: true,
+      canStart: true,
+      message: resumeAttemptId
+        ? resumeReason
+        : "Quiz access validated successfully.",
+      data: {
+        quiz: {
+          _id: quiz._id,
+          courseId: quiz.courseId,
+          prerequisiteLectureIds: quiz.prerequisiteLectureIds,
+          title: quiz.title,
+          description: quiz.description,
+          questions: quiz.questions.length, // Just count, not full data
+          passingScore: quiz.passingScore,
+          timeLimit: quiz.timeLimit,
+          attemptsAllowed: quiz.attemptsAllowed,
+          instantFeedbackEnabled: quiz.instantFeedbackEnabled,
+          quizType: quiz.quizType,
+        },
+        attempts: attempts.map((attempt) => ({
+          _id: attempt._id,
+          attemptNumber: attempt.attemptNumber,
+          status: attempt.status,
+          startedAt: attempt.startedAt,
+          completedAt: attempt.completedAt,
+          score: attempt.score,
+          passed: attempt.passed,
+        })),
+        resumeAttemptId,
+        resumeReason,
+      },
+    });
+  } catch (e) {
+    console.error("Error validating quiz access:", e);
+    res.status(500).json({
+      success: false,
+      canStart: false,
+      message: "Failed to validate quiz access. Please try again.",
     });
   }
 };
@@ -1030,18 +1251,11 @@ const finalizeQuizAttempt = async (req, res) => {
     // Update quiz progress in course progress
     try {
       await updateQuizProgress(
-        {
-          body: {
-            userId: studentId,
-            courseId: quiz.courseId.toString(),
-            quizId: quizId,
-            score,
-            passed,
-          },
-        },
-        {
-          status: () => ({ json: () => {} }),
-        }
+        studentId,
+        quiz.courseId.toString(),
+        quizId,
+        score,
+        passed
       );
     } catch (progressError) {
       console.error("Error updating quiz progress:", progressError);
@@ -1072,6 +1286,7 @@ const finalizeQuizAttempt = async (req, res) => {
 module.exports = {
   getQuizzesByCourse,
   getQuizById,
+  validateQuizAccess,
   startQuizAttempt,
   submitQuizAttempt,
   submitQuestionAnswer,

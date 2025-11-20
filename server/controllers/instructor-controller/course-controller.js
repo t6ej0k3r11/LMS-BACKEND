@@ -193,19 +193,11 @@ const publishCourse = async (req, res) => {
       });
     }
 
-    // Check if course is already published
-    if (course.status === "published") {
+    // Check if course is already submitted or published
+    if (course.status === "submitted" || course.status === "published") {
       return res.status(400).json({
         success: false,
-        message: "Course is already published!",
-      });
-    }
-
-    // Check admin approval (skip for draft courses in testing)
-    if (course.approvalStatus !== "approved" && course.status !== "draft") {
-      return res.status(400).json({
-        success: false,
-        message: "Course must be approved by admin before publishing!",
+        message: "Course is already submitted for review or published!",
       });
     }
 
@@ -230,14 +222,14 @@ const publishCourse = async (req, res) => {
       });
     }
 
-    // Publish the course
-    course.status = "published";
-    course.approvalStatus = "approved"; // Auto-approve when publishing draft
+    // Submit the course for review
+    course.status = "submitted";
+    course.approvalStatus = "pending";
     await course.save();
 
     res.status(200).json({
       success: true,
-      message: "Course published successfully!",
+      message: "Course submitted for review successfully!",
       data: course,
     });
   } catch (e) {

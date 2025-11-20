@@ -38,9 +38,10 @@ const QuizAttemptSchema = new mongoose.Schema(
     passed: { type: Boolean, default: false },
     status: {
       type: String,
-      enum: ["in_progress", "completed"],
-      default: "in_progress",
+      enum: ["not_started", "in_progress", "completed", "abandoned"],
+      default: "not_started",
     },
+    isLocked: { type: Boolean, default: false },
     startedAt: { type: Date, required: true },
     completedAt: { type: Date },
     timeSpent: { type: Number, default: 0 }, // in seconds

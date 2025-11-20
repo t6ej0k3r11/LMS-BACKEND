@@ -28,11 +28,12 @@ const QuizSchema = new mongoose.Schema(
       ref: "Course",
       required: true,
     },
-    lectureId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Lecture",
-      default: null,
-    }, // null for final quiz
+    prerequisiteLectureIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Lecture",
+      },
+    ], // empty for final quiz
     quizType: {
       type: String,
       enum: ["lesson", "final"],
@@ -46,6 +47,7 @@ const QuizSchema = new mongoose.Schema(
     attemptsAllowed: { type: Number, default: 1 },
     instantFeedbackEnabled: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    isValid: { type: Boolean, default: true }, // true if all questions are valid
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

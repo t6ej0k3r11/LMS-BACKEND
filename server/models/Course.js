@@ -55,9 +55,16 @@ const CourseSchema = new mongoose.Schema({
     },
   ],
   curriculum: [LectureSchema],
+  lessons: [LectureSchema], // Alias for curriculum
+  quizzes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Quiz",
+    },
+  ],
   status: {
     type: String,
-    enum: ["draft", "published"],
+    enum: ["draft", "submitted", "published"],
     default: "draft",
   },
   approvalStatus: {
@@ -66,6 +73,7 @@ const CourseSchema = new mongoose.Schema({
     default: "pending",
   },
   approvalDate: Date,
+  publishedAt: Date,
   approvedBy: String, // admin ID who approved/rejected
   rejectionReason: String,
 });

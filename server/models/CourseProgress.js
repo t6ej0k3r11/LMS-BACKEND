@@ -46,6 +46,16 @@ const UserCourseProgressSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  lectures: {
+    type: Map,
+    of: String,
+    default: {},
+  },
+  quizzes: {
+    type: Map,
+    of: String,
+    default: {},
+  },
 });
 
 // Add indexes for frequently queried fields

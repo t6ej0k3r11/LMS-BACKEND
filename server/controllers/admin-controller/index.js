@@ -766,7 +766,7 @@ const getPendingInstructors = async (req, res) => {
 
     const instructors = await User.find({
       role: "instructor",
-      status: "pending",
+      instructorStatus: "pending",
     })
       .select("-password")
       .sort({ createdAt: -1 })
@@ -775,7 +775,7 @@ const getPendingInstructors = async (req, res) => {
 
     const total = await User.countDocuments({
       role: "instructor",
-      status: "pending",
+      instructorStatus: "pending",
     });
 
     res.status(200).json({
@@ -813,15 +813,20 @@ const approveInstructor = async (req, res) => {
       });
     }
 
-    if (instructor.role !== "instructor" || instructor.status !== "pending") {
+    if (
+      instructor.role !== "instructor" ||
+      instructor.instructorStatus !== "pending"
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid instructor application",
       });
     }
 
-    // Update status to approved
-    instructor.status = "approved";
+    // Update instructorStatus to approved
+    instructor.instructorStatus = "approved";
+    instructor.approvedAt = new Date();
+    instructor.rejectionReason = undefined; // Clear any previous rejection
     await instructor.save();
 
     // Send approval email
@@ -886,15 +891,19 @@ const rejectInstructor = async (req, res) => {
       });
     }
 
-    if (instructor.role !== "instructor" || instructor.status !== "pending") {
+    if (
+      instructor.role !== "instructor" ||
+      instructor.instructorStatus !== "pending"
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid instructor application",
       });
     }
 
-    // Update status to rejected
-    instructor.status = "rejected";
+    // Update instructorStatus to rejected
+    instructor.instructorStatus = "rejected";
+    instructor.rejectionReason = reason;
     await instructor.save();
 
     // Send rejection email
@@ -1210,6 +1219,138 @@ const deleteQuestion = async (req, res) => {
   }
 };
 
+// Approve course
+const approveCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const course = await Course.findById(id);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    if (course.approvalStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Course is not pending approval",
+      });
+    }
+
+    const oldStatus = course.approvalStatus;
+    course.approvalStatus = "approved";
+    course.status = "published";
+    course.publishedAt = new Date();
+    course.approvalDate = new Date();
+    course.approvedBy = req.user._id;
+    course.rejectionReason = undefined; // Clear any previous rejection
+
+    await course.save();
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "course_approved",
+      "course",
+      id,
+      course.title,
+      {
+        oldStatus,
+        newStatus: "approved",
+        publishedAt: course.publishedAt,
+      },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Course approved and published successfully",
+      data: {
+        courseId: id,
+        approvalStatus: course.approvalStatus,
+        status: course.status,
+        publishedAt: course.publishedAt,
+        approvalDate: course.approvalDate,
+      },
+    });
+  } catch (error) {
+    console.error("Approve course error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to approve course",
+    });
+  }
+};
+
+// Reject course
+const rejectCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectionReason } = req.body;
+
+    const course = await Course.findById(id);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    if (course.approvalStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Course is not pending approval",
+      });
+    }
+
+    const oldStatus = course.approvalStatus;
+    course.approvalStatus = "rejected";
+    course.status = "draft";
+    course.approvalDate = new Date();
+    course.approvedBy = req.user._id;
+    course.rejectionReason = rejectionReason || "No reason provided";
+
+    await course.save();
+
+    // Log the action
+    await logAdminAction(
+      req.user._id,
+      req.user.userName,
+      "course_rejected",
+      "course",
+      id,
+      course.title,
+      {
+        oldStatus,
+        newStatus: "rejected",
+        rejectionReason: course.rejectionReason,
+      },
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Course rejected successfully",
+      data: {
+        courseId: id,
+        approvalStatus: course.approvalStatus,
+        status: course.status,
+        approvalDate: course.approvalDate,
+        rejectionReason: course.rejectionReason,
+      },
+    });
+  } catch (error) {
+    console.error("Reject course error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reject course",
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   updateUser,
@@ -1219,6 +1360,8 @@ module.exports = {
   bulkUserAction,
   getPendingCourses,
   reviewCourse,
+  approveCourse,
+  rejectCourse,
   getAuditLogs,
   getAdminStats,
   getRecentActivities,

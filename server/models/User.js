@@ -35,6 +35,29 @@ const UserSchema = new mongoose.Schema(
       enum: ["pending", "approved", "active", "inactive"],
       default: "active",
     },
+    instructorStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+    },
+    application: {
+      bio: {
+        type: String,
+        maxlength: 1000,
+      },
+      experience: {
+        type: String,
+        maxlength: 1000,
+      },
+      submittedAt: {
+        type: Date,
+      },
+    },
+    approvedAt: {
+      type: Date,
+    },
+    rejectionReason: {
+      type: String,
+    },
     enrollmentDate: {
       type: Date,
     },

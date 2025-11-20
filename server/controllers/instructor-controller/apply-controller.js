@@ -1,4 +1,4 @@
-const Instructor = require("../../models/Instructor");
+const User = require("../../models/User");
 
 // Password strength validation function
 const validatePasswordStrength = (password) => {
@@ -62,7 +62,7 @@ const validatePasswordStrength = (password) => {
 };
 
 const applyForInstructor = async (req, res) => {
-  const { userName, userEmail, password, bio } = req.body;
+  const { userName, userEmail, password, bio, experience } = req.body;
 
   // Check for missing required fields
   if (!userName || !userEmail || !password || !bio) {
@@ -86,27 +86,32 @@ const applyForInstructor = async (req, res) => {
   }
 
   try {
-    // Check if application already exists for this email or username
-    const existingApplication = await Instructor.findOne({
+    // Check if user already exists
+    const existingUser = await User.findOne({
       $or: [{ userEmail: userEmail.toLowerCase() }, { userName }],
     });
 
-    if (existingApplication) {
+    if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "An application with this email or username already exists",
+        message: "A user with this email or username already exists",
       });
     }
 
-    const newApplication = new Instructor({
+    const newUser = new User({
       userName,
       userEmail: userEmail.toLowerCase(),
       password,
-      bio,
-      status: "pending",
+      role: "instructor",
+      instructorStatus: "pending",
+      application: {
+        bio,
+        experience: experience || "",
+        submittedAt: new Date(),
+      },
     });
 
-    await newApplication.save();
+    await newUser.save();
 
     return res.status(201).json({
       success: true,

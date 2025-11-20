@@ -2,6 +2,7 @@ const express = require("express");
 const {
   getQuizzesByCourse,
   getQuizById,
+  validateQuizAccess,
   startQuizAttempt,
   submitQuizAttempt,
   submitQuestionAnswer,
@@ -24,6 +25,9 @@ router.get("/course/:courseId", getQuizzesByCourse);
 
 // GET /:quizId - get quiz for taking
 router.get("/:quizId", getQuizById);
+
+// GET /:quizId/validate - validate quiz access and prerequisites
+router.get("/:quizId/validate", validateQuizAccess);
 
 // POST /:quizId/attempt - start quiz attempt
 router.post("/:quizId/attempt", startQuizAttempt);

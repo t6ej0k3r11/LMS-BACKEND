@@ -9,7 +9,7 @@ const createQuiz = async (req, res) => {
   try {
     const {
       courseId,
-      lectureId,
+      prerequisiteLectureIds = [],
       quizType = "lesson",
       title,
       description,
@@ -45,19 +45,21 @@ const createQuiz = async (req, res) => {
       });
     }
 
-    // Validate lecture ID for lesson quizzes
-    if (quizType === "lesson") {
-      if (!lectureId) {
-        return res.status(400).json({
-          success: false,
-          message: "Lecture ID is required for lesson quizzes",
-        });
-      }
-      if (!require("mongoose").Types.ObjectId.isValid(lectureId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid lecture ID format",
-        });
+    // Validate prerequisite lecture IDs
+    if (prerequisiteLectureIds && !Array.isArray(prerequisiteLectureIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "Prerequisite lecture IDs must be an array",
+      });
+    }
+    if (prerequisiteLectureIds) {
+      for (const id of prerequisiteLectureIds) {
+        if (!require("mongoose").Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid prerequisite lecture ID format",
+          });
+        }
       }
     }
 
@@ -206,7 +208,7 @@ const createQuiz = async (req, res) => {
 
     const newQuiz = new Quiz({
       courseId,
-      lectureId: quizType === "lesson" ? lectureId : null,
+      prerequisiteLectureIds: prerequisiteLectureIds || [],
       quizType,
       title,
       description,
@@ -510,15 +512,13 @@ const reviewBroadTextAnswer = async (req, res) => {
 
     // Update course progress if the quiz is now passed
     if (passed) {
-      await updateQuizProgress({
-        body: {
-          userId: attempt.studentId,
-          courseId: attempt.quizId.courseId,
-          quizId: attempt.quizId._id,
-          score,
-          passed,
-        },
-      });
+      await updateQuizProgress(
+        attempt.studentId,
+        attempt.quizId.courseId.toString(),
+        attempt.quizId._id.toString(),
+        score,
+        passed
+      );
     }
 
     res.status(200).json({
