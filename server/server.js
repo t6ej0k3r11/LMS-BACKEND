@@ -73,7 +73,7 @@ app.use("/instructor/course", instructorCourseRoutes);
 app.use("/instructor/quiz", instructorQuizRoutes);
 app.use("/instructor", instructorApplyRoutes);
 app.use("/student/course", studentViewCourseRoutes);
-app.use("/student/order", studentViewOrderRoutes);
+app.use("/api/orders", studentViewOrderRoutes);
 app.use("/student/courses-bought", studentCoursesRoutes);
 app.use("/student/course-progress", studentCourseProgressRoutes);
 app.use("/student/quiz", studentQuizRoutes);

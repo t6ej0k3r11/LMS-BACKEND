@@ -11,6 +11,7 @@ const router = express.Router();
 router.use(authenticate.authenticate);
 
 router.post("/create", createOrder);
+router.post("/enroll", createOrder);
 router.post("/capture", capturePaymentAndFinalizeOrder);
 
 module.exports = router;

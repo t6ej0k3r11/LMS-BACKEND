@@ -327,7 +327,11 @@ const reviewCourse = async (req, res) => {
     course.approvalDate = new Date();
     course.approvedBy = req.user._id;
 
-    if (action === "reject") {
+    if (action === "approve") {
+      course.status = "published";
+      course.publishedAt = new Date();
+      course.rejectionReason = undefined; // Clear any previous rejection
+    } else if (action === "reject") {
       if (!rejectionReason) {
         return res.status(400).json({
           success: false,
@@ -335,6 +339,7 @@ const reviewCourse = async (req, res) => {
         });
       }
       course.rejectionReason = rejectionReason;
+      course.status = "draft"; // Reset to draft on rejection
     }
 
     await course.save();
@@ -361,7 +366,9 @@ const reviewCourse = async (req, res) => {
       data: {
         courseId,
         approvalStatus: course.approvalStatus,
+        status: course.status,
         approvalDate: course.approvalDate,
+        publishedAt: course.publishedAt,
         rejectionReason: course.rejectionReason,
       },
     });
@@ -663,7 +670,11 @@ const updateCourseStatus = async (req, res) => {
     course.approvalDate = new Date();
     course.approvedBy = req.user._id;
 
-    if (approvalStatus === "rejected") {
+    if (approvalStatus === "approved") {
+      course.status = "published";
+      course.publishedAt = new Date();
+      course.rejectionReason = undefined;
+    } else if (approvalStatus === "rejected") {
       if (!rejectionReason) {
         return res.status(400).json({
           success: false,
@@ -671,8 +682,7 @@ const updateCourseStatus = async (req, res) => {
         });
       }
       course.rejectionReason = rejectionReason;
-    } else if (approvalStatus === "approved") {
-      course.rejectionReason = undefined;
+      course.status = "draft"; // Reset to draft on rejection
     }
 
     await course.save();

@@ -5,82 +5,64 @@ const StudentCourses = require("../../models/StudentCourses");
 
 const createOrder = async (req, res) => {
   try {
-    const {
-      userId,
-      userName,
-      userEmail,
-      orderStatus,
-      paymentMethod,
-      paymentStatus,
-      orderDate,
-      paymentId,
-      payerId,
-      courseId,
-      coursePricing,
-    } = req.body;
+    const { courseId, paymentConfirmed } = req.body;
+    const studentId = req.user._id;
+    const userName = req.user.userName;
+    const userEmail = req.user.userEmail;
+
     // Fetch course from DB for validation
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
+    // Check course status and approval
+    if (course.status !== "published" || course.approvalStatus !== "approved") {
+      return res
+        .status(400)
+        .json({ message: "Course not available for enrollment" });
+    }
+
     const isFreeCourse = course.pricing === 0;
 
+    // Check if student already enrolled
+    const existingStudentCourses = await StudentCourses.findOne({
+      userId: studentId,
+    });
+    const alreadyEnrolled = existingStudentCourses?.courses?.some(
+      (c) => c.courseId === courseId
+    );
+    if (alreadyEnrolled) {
+      return res.status(400).json({ message: "Already enrolled" });
+    }
+
     if (!isFreeCourse) {
-      if (course.pricing !== coursePricing) {
-        return res.status(400).json({ message: "Invalid course price" });
-      }
-      // Verify payment status (simulated for this implementation)
-      const paymentConfirmed = true; // Assuming simulated payment is confirmed
       if (!paymentConfirmed) {
-        return res.status(402).json({ message: "Payment required" });
-      }
-    } else {
-      if (coursePricing !== 0) {
-        return res
-          .status(400)
-          .json({ message: "Invalid course price for free course" });
+        return res.status(400).json({ message: "Payment required" });
       }
     }
 
     // Log enrollment attempt for auditing
-    console.log(`Enrollment attempt for course ${courseId} by user ${userId}`);
+    console.log(
+      `Enrollment attempt for course ${courseId} by user ${studentId}`
+    );
 
     // Use validated course data
     const instructorId = course.instructorId;
     const instructorName = course.instructorName;
     const courseTitle = course.title;
     const courseImage = course.image;
+    const coursePricing = course.pricing;
 
-    // Check if user has already completed this course (for paid courses only)
-    const studentCourses = await StudentCourses.findOne({ userId });
-    const enrolledCourse = studentCourses?.courses?.find(
-      (course) => course.courseId === courseId
-    );
-    if (enrolledCourse && course.pricing > 0) {
-      const CourseProgress = require("../../models/CourseProgress");
-      const progress = await CourseProgress.findOne({
-        userId,
-        courseId,
-      });
-      if (progress && progress.isCompleted) {
-        return res.status(400).json({
-          success: false,
-          message: "You have already completed this course.",
-        });
-      }
-      // For paid courses, allow re-enrollment if not completed
-    }
-    // For free courses, allow enrollment even if completed
-
-    // For free courses, skip PayPal and directly enroll
+    // For free courses, directly enroll
     if (isFreeCourse) {
+      const orderDate = new Date();
       const newlyCreatedCourseOrder = new Order({
-        userId,
+        userId: studentId,
         userName,
         userEmail,
         orderStatus: "confirmed",
-        paymentMethod,
+        paymentMethod: "free",
         paymentStatus: "completed",
         orderDate,
         paymentId: "FREE_ENROLLMENT",
@@ -96,32 +78,32 @@ const createOrder = async (req, res) => {
       await newlyCreatedCourseOrder.save();
 
       // Directly enroll the student
-      const studentCourses = await StudentCourses.findOne({
-        userId: userId,
+      let studentCourses = await StudentCourses.findOne({
+        userId: studentId,
       });
 
       if (studentCourses) {
         studentCourses.courses.push({
-          courseId: courseId,
+          courseId,
           title: courseTitle,
-          instructorId: instructorId,
-          instructorName: instructorName,
+          instructorId,
+          instructorName,
           dateOfPurchase: orderDate,
-          courseImage: courseImage,
+          courseImage,
         });
 
         await studentCourses.save();
       } else {
         const newStudentCourses = new StudentCourses({
-          userId: userId,
+          userId: studentId,
           courses: [
             {
-              courseId: courseId,
+              courseId,
               title: courseTitle,
-              instructorId: instructorId,
-              instructorName: instructorName,
+              instructorId,
+              instructorName,
               dateOfPurchase: orderDate,
-              courseImage: courseImage,
+              courseImage,
             },
           ],
         });
@@ -133,7 +115,7 @@ const createOrder = async (req, res) => {
       await Course.findByIdAndUpdate(courseId, {
         $addToSet: {
           students: {
-            studentId: userId,
+            studentId,
             studentName: userName,
             studentEmail: userEmail,
             paidAmount: 0,
@@ -151,13 +133,14 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // For paid courses, simulate payment without PayPal
+    // For paid courses, simulate payment
+    const orderDate = new Date();
     const newlyCreatedCourseOrder = new Order({
-      userId,
+      userId: studentId,
       userName,
       userEmail,
       orderStatus: "confirmed",
-      paymentMethod,
+      paymentMethod: "paypal",
       paymentStatus: "completed",
       orderDate,
       paymentId: "SIMULATED_PAYMENT",
@@ -173,44 +156,44 @@ const createOrder = async (req, res) => {
     await newlyCreatedCourseOrder.save();
 
     // Directly enroll the student
-    let studentCoursesPaid = await StudentCourses.findOne({
-      userId: userId,
+    let studentCourses = await StudentCourses.findOne({
+      userId: studentId,
     });
 
-    if (studentCoursesPaid) {
-      studentCoursesPaid.courses.push({
-        courseId: courseId,
+    if (studentCourses) {
+      studentCourses.courses.push({
+        courseId,
         title: courseTitle,
-        instructorId: instructorId,
-        instructorName: instructorName,
+        instructorId,
+        instructorName,
         dateOfPurchase: orderDate,
-        courseImage: courseImage,
+        courseImage,
       });
 
-      await studentCoursesPaid.save();
+      await studentCourses.save();
     } else {
-      const newStudentCoursesPaid = new StudentCourses({
-        userId: userId,
+      const newStudentCourses = new StudentCourses({
+        userId: studentId,
         courses: [
           {
-            courseId: courseId,
+            courseId,
             title: courseTitle,
-            instructorId: instructorId,
-            instructorName: instructorName,
+            instructorId,
+            instructorName,
             dateOfPurchase: orderDate,
-            courseImage: courseImage,
+            courseImage,
           },
         ],
       });
 
-      await newStudentCoursesPaid.save();
+      await newStudentCourses.save();
     }
 
     // Update the course schema students
     await Course.findByIdAndUpdate(courseId, {
       $addToSet: {
         students: {
-          studentId: userId,
+          studentId,
           studentName: userName,
           studentEmail: userEmail,
           paidAmount: coursePricing,

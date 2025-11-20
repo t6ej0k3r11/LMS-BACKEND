@@ -222,7 +222,7 @@ describe("Authentication Flow Integration Tests", () => {
       };
 
       const response = await agent
-        .post("/student/order/create")
+        .post("/api/orders/create")
         .set("Authorization", `Bearer ${studentToken}`)
         .send(enrollmentData)
         .expect(201);

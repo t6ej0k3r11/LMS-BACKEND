@@ -299,7 +299,7 @@ async function testCourseEnrollment() {
 
   const result = await makeRequest(
     "POST",
-    "/student/order/create",
+    "/api/orders/create",
     enrollmentData,
     authToken
   );
