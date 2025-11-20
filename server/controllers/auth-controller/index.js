@@ -4,6 +4,11 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendPasswordResetEmail } = require("../../utils/emailService");
 
+// Generate a secure random refresh token
+const generateRefreshToken = () => {
+  return crypto.randomBytes(64).toString("hex");
+};
+
 // Password strength validation function
 const validatePasswordStrength = (password) => {
   const errors = [];
@@ -168,20 +173,26 @@ const loginUser = async (req, res) => {
       { expiresIn: "15m" } // Short-lived access token
     );
 
-    const refreshToken = jwt.sign(
-      {
-        _id: checkUser._id,
-      },
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
-      { expiresIn: "7d" } // Long-lived refresh token
-    );
+    // Generate opaque refresh token
+    const refreshToken = generateRefreshToken();
+
+    // Hash and store refresh token
+    await checkUser.addRefreshToken(refreshToken);
+
+    // Set refresh token as httpOnly cookie
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     res.status(200).json({
       success: true,
       message: "Logged in successfully",
       data: {
         accessToken,
-        refreshToken,
         user: {
           _id: checkUser._id,
           userName: checkUser.userName,
@@ -201,7 +212,7 @@ const loginUser = async (req, res) => {
 };
 
 const refreshAccessToken = async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
     return res.status(401).json({
@@ -211,12 +222,16 @@ const refreshAccessToken = async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
-    );
+    // Find user with matching refresh token hash
+    const users = await User.find({});
+    let user = null;
+    for (const u of users) {
+      if (await u.verifyAndRemoveRefreshToken(refreshToken)) {
+        user = u;
+        break;
+      }
+    }
 
-    const user = await User.findById(decoded._id);
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -224,6 +239,7 @@ const refreshAccessToken = async (req, res) => {
       });
     }
 
+    // Generate new access token
     const newAccessToken = jwt.sign(
       {
         _id: user._id,
@@ -235,6 +251,21 @@ const refreshAccessToken = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
     );
+
+    // Generate new refresh token
+    const newRefreshToken = generateRefreshToken();
+
+    // Hash and store new refresh token
+    await user.addRefreshToken(newRefreshToken);
+
+    // Set new refresh token cookie
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     res.status(200).json({
       success: true,
@@ -366,6 +397,35 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const logoutUser = async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (refreshToken) {
+    try {
+      // Find and clear refresh tokens for the user
+      const users = await User.find({});
+      for (const user of users) {
+        await user.verifyAndRemoveRefreshToken(refreshToken);
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Continue with logout even if token removal fails
+    }
+  }
+
+  // Clear the refresh token cookie
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Logged out successfully",
+  });
+};
+
 const checkAuth = async (req, res) => {
   try {
     // Fetch fresh user data from database
@@ -397,6 +457,7 @@ module.exports = {
   registerUser,
   loginUser,
   refreshAccessToken,
+  logoutUser,
   requestPasswordReset,
   resetPassword,
   checkAuth,

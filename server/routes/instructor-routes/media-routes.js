@@ -6,15 +6,15 @@ const {
 } = require("../../helpers/cloudinary");
 const authenticate = require("../../middleware/auth-middleware");
 const {
-  checkInstructorRole,
+  checkInstructorApproved,
 } = require("../../middleware/instructor-middleware");
 
 const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate.authenticate);
-// Apply instructor role check to all routes (allows any instructor status)
-router.use(checkInstructorRole);
+// Apply instructor approval check to all routes (requires approved instructor)
+router.use(checkInstructorApproved);
 
 const upload = multer({ dest: "uploads/" });
 

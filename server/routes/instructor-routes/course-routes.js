@@ -20,25 +20,30 @@ const router = express.Router();
 // Apply authentication middleware to all routes
 router.use(authenticate.authenticate);
 
-// Course creation and management (allow any instructor)
-router.post("/add", checkInstructorRole, validateCourseCreation, addNewCourse);
+// Course creation and management (require approved instructor)
+router.post(
+  "/add",
+  checkInstructorApproved,
+  validateCourseCreation,
+  addNewCourse
+);
 router.post(
   "/draft",
-  checkInstructorRole,
+  checkInstructorApproved,
   validateCourseCreation,
   addNewCourse
 ); // Alias for creating draft
-router.get("/get", checkInstructorRole, getAllCourses);
-router.get("/get/details/:id", checkInstructorRole, getCourseDetailsByID);
+router.get("/get", checkInstructorApproved, getAllCourses);
+router.get("/get/details/:id", checkInstructorApproved, getCourseDetailsByID);
 router.put(
   "/update/:id",
-  checkInstructorRole,
+  checkInstructorApproved,
   validateCourseCreation,
   updateCourseByID
 );
-router.delete("/delete/:id", checkInstructorRole, deleteCourseByID);
+router.delete("/delete/:id", checkInstructorApproved, deleteCourseByID);
 
-// Publishing requires instructor role (course approval checked in controller)
-router.patch("/:id/publish", checkInstructorRole, publishCourse);
+// Publishing requires approved instructor
+router.patch("/:id/publish", checkInstructorApproved, publishCourse);
 
 module.exports = router;

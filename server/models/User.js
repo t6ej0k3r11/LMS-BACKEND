@@ -41,6 +41,12 @@ const UserSchema = new mongoose.Schema(
     hireDate: {
       type: Date,
     },
+    refreshTokens: [
+      {
+        type: String, // Hashed refresh tokens
+        required: true,
+      },
+    ],
   },
   {
     timestamps: true,
@@ -82,6 +88,32 @@ UserSchema.pre("save", function (next) {
 // Method to compare password
 UserSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Method to add hashed refresh token
+UserSchema.methods.addRefreshToken = async function (token) {
+  const hashedToken = await bcrypt.hash(token, 12);
+  this.refreshTokens.push(hashedToken);
+  await this.save();
+};
+
+// Method to verify and remove refresh token
+UserSchema.methods.verifyAndRemoveRefreshToken = async function (token) {
+  for (let i = 0; i < this.refreshTokens.length; i++) {
+    const isValid = await bcrypt.compare(token, this.refreshTokens[i]);
+    if (isValid) {
+      this.refreshTokens.splice(i, 1);
+      await this.save();
+      return true;
+    }
+  }
+  return false;
+};
+
+// Method to clear all refresh tokens
+UserSchema.methods.clearRefreshTokens = async function () {
+  this.refreshTokens = [];
+  await this.save();
 };
 
 module.exports = mongoose.model("User", UserSchema);

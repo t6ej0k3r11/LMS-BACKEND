@@ -2,11 +2,14 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const cookieParser = require("cookie-parser");
 
-// Debug: Check environment variables
-console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
-console.log("JWT_REFRESH_SECRET set:", !!process.env.JWT_REFRESH_SECRET);
-console.log("MONGO_URI set:", !!process.env.MONGO_URI);
+// Debug: Check environment variables (only in development)
+if (process.env.NODE_ENV !== "production") {
+  console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
+  console.log("JWT_REFRESH_SECRET set:", !!process.env.JWT_REFRESH_SECRET);
+  console.log("MONGO_URI set:", !!process.env.MONGO_URI);
+}
 
 // Routes
 const authRoutes = require("./routes/auth-routes/index");
@@ -44,6 +47,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(cookieParser());
 
 // =========================
 // 🗄️ Database Connection

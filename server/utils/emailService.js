@@ -31,11 +31,13 @@ const createTransporter = async () => {
   });
 
   // Log the test account details for development
-  console.log("Test account created:", {
-    user: testAccount.user,
-    pass: testAccount.pass,
-    web: "https://ethereal.email",
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Test account created:", {
+      user: testAccount.user,
+      pass: testAccount.pass,
+      web: "https://ethereal.email",
+    });
+  }
 
   return transporter;
 };

@@ -66,8 +66,10 @@ const authorize = (...roles) => {
 };
 
 // Middleware to check if user owns the resource or is admin
-const authorizeOwnerOrAdmin = (resourceUserIdField = "userId") => {
-  return (req, res, next) => {
+const authorizeOwnerOrAdmin = (Model, options = {}) => {
+  const { ownershipField = "createdBy" } = options;
+
+  return async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -75,17 +77,46 @@ const authorizeOwnerOrAdmin = (resourceUserIdField = "userId") => {
       });
     }
 
-    const resourceUserId =
-      req.params[resourceUserIdField] || req.body[resourceUserIdField];
-
-    if (req.user.role === "instructor" || req.user._id === resourceUserId) {
-      return next();
+    const resourceId = req.params.id;
+    if (!resourceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Resource ID is required",
+      });
     }
 
-    return res.status(403).json({
-      success: false,
-      message: "Access denied",
-    });
+    try {
+      const resource = await Model.findById(resourceId);
+      if (!resource) {
+        return res.status(404).json({
+          success: false,
+          message: "Resource not found",
+        });
+      }
+
+      // Admin has full access
+      if (req.user.role === "admin") {
+        return next();
+      }
+
+      // Check if user is the owner
+      const ownerId = resource[ownershipField];
+      if (ownerId && ownerId.toString() === req.user._id.toString()) {
+        return next();
+      }
+
+      // Deny access for non-owners and non-admins
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    } catch (error) {
+      console.error("Error in authorizeOwnerOrAdmin middleware:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
   };
 };
 

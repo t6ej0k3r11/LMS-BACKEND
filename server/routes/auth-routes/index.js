@@ -3,6 +3,7 @@ const {
   registerUser,
   loginUser,
   refreshAccessToken,
+  logoutUser,
   requestPasswordReset,
   resetPassword,
   checkAuth,
@@ -20,6 +21,7 @@ const router = express.Router();
 router.post("/register", validateRegistration, registerUser);
 router.post("/login", validateLogin, loginUser);
 router.post("/refresh-token", refreshAccessToken);
+router.post("/logout", logoutUser);
 
 // Password reset routes
 router.post(

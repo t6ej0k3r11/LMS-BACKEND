@@ -12,7 +12,7 @@ const {
 } = require("../../controllers/instructor-controller/quiz-controller");
 const authenticate = require("../../middleware/auth-middleware");
 const {
-  checkInstructorRole,
+  checkInstructorApproved,
 } = require("../../middleware/instructor-middleware");
 const {
   validateQuizCreation,
@@ -22,8 +22,8 @@ const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate.authenticate);
-// Apply instructor role check to all routes (allows any instructor status)
-router.use(checkInstructorRole);
+// Apply instructor approval check to all routes (requires approved instructor)
+router.use(checkInstructorApproved);
 
 router.post("/create", validateQuizCreation, createQuiz);
 router.get("/course/:courseId", getQuizzesByCourse);

@@ -130,6 +130,13 @@ describe("Authentication Flow Integration Tests", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty("accessToken");
       expect(response.body.data).toHaveProperty("user");
+      // Check that refresh token cookie is set
+      expect(response.headers["set-cookie"]).toBeDefined();
+      expect(
+        response.headers["set-cookie"].some((cookie) =>
+          cookie.includes("refreshToken")
+        )
+      ).toBe(true);
 
       studentToken = response.body.data.accessToken;
     });
@@ -154,6 +161,12 @@ describe("Authentication Flow Integration Tests", () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
+      expect(response.headers["set-cookie"]).toBeDefined();
+      expect(
+        response.headers["set-cookie"].some((cookie) =>
+          cookie.includes("refreshToken")
+        )
+      ).toBe(true);
       instructorToken = response.body.data.accessToken;
       testCourse.instructorId = response.body.data.user._id;
       testQuiz.createdBy = response.body.data.user._id;
@@ -182,6 +195,12 @@ describe("Authentication Flow Integration Tests", () => {
         })
         .expect(200);
 
+      expect(loginResponse.headers["set-cookie"]).toBeDefined();
+      expect(
+        loginResponse.headers["set-cookie"].some((cookie) =>
+          cookie.includes("refreshToken")
+        )
+      ).toBe(true);
       const studentId = loginResponse.body.data.user._id;
 
       const enrollmentData = {
@@ -280,6 +299,370 @@ describe("Authentication Flow Integration Tests", () => {
       expect(response.body.data).toHaveProperty("score");
       expect(response.body.data).toHaveProperty("passed");
       expect(response.body.data.score).toBe(100); // Should be 100% for correct answer
+    });
+  });
+
+  describe("Instructor Approval Status Tests", () => {
+    let approvedInstructorToken, pendingInstructorToken;
+
+    const approvedInstructor = {
+      userName: `approvedinstructor_${Date.now()}`,
+      userEmail: `approvedinstructor_${Date.now()}@example.com`,
+      password: "Test@123456",
+      role: "instructor",
+    };
+
+    const pendingInstructor = {
+      userName: `pendinginstructor_${Date.now()}`,
+      userEmail: `pendinginstructor_${Date.now()}@example.com`,
+      password: "Test@123456",
+      role: "instructor",
+    };
+
+    const testCourse = {
+      instructorId: "", // Will be set after login
+      instructorName: "Test Instructor",
+      date: new Date(),
+      title: "Approval Test Course",
+      category: "Technology",
+      level: "beginner",
+      primaryLanguage: "English",
+      subtitle: "Test Course Subtitle",
+      description: "A test course for approval testing",
+      image: "https://example.com/test-image.jpg",
+      welcomeMessage: "Welcome to the test course!",
+      pricing: 99,
+      courseType: "paid",
+      objectives: "Learn approval testing",
+      students: [],
+      curriculum: [
+        {
+          title: "Introduction",
+          videoUrl: "https://example.com/test-video.mp4",
+          public_id: "test-public-id",
+          freePreview: true,
+        },
+      ],
+      status: "published",
+      approvalStatus: "approved",
+    };
+
+    test("Register and approve instructor", async () => {
+      // Register approved instructor
+      const registerResponse = await agent
+        .post("/auth/register")
+        .send(approvedInstructor)
+        .expect(201);
+
+      // Manually set status to approved (simulating admin approval)
+      const User = require("../../models/User");
+      await User.findByIdAndUpdate(registerResponse.body.data.user._id, {
+        status: "approved",
+      });
+
+      // Login
+      const loginResponse = await agent
+        .post("/auth/login")
+        .send({
+          userEmail: approvedInstructor.userEmail,
+          password: approvedInstructor.password,
+        })
+        .expect(200);
+
+      approvedInstructorToken = loginResponse.body.data.accessToken;
+      testCourse.instructorId = loginResponse.body.data.user._id;
+    });
+
+    test("Register pending instructor", async () => {
+      // Register pending instructor
+      const registerResponse = await agent
+        .post("/auth/register")
+        .send(pendingInstructor)
+        .expect(201);
+
+      // Ensure status is pending (default for instructors might be active, but set to pending)
+      const User = require("../../models/User");
+      await User.findByIdAndUpdate(registerResponse.body.data.user._id, {
+        status: "pending",
+      });
+
+      // Login
+      const loginResponse = await agent
+        .post("/auth/login")
+        .send({
+          userEmail: pendingInstructor.userEmail,
+          password: pendingInstructor.password,
+        })
+        .expect(200);
+
+      pendingInstructorToken = loginResponse.body.data.accessToken;
+    });
+
+    test("Approved instructor can create course", async () => {
+      const response = await agent
+        .post("/instructor/course/add")
+        .set("Authorization", `Bearer ${approvedInstructorToken}`)
+        .send(testCourse)
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty("_id");
+    });
+
+    test("Pending instructor cannot create course", async () => {
+      const response = await agent
+        .post("/instructor/course/add")
+        .set("Authorization", `Bearer ${pendingInstructorToken}`)
+        .send(testCourse)
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "Instructor account is pending approval"
+      );
+    });
+  });
+
+  describe("Course Ownership Security Tests", () => {
+    let instructor1Token, instructor2Token, adminToken, course1Id, course2Id;
+
+    const instructor1 = {
+      userName: `instructor1_${Date.now()}`,
+      userEmail: `instructor1_${Date.now()}@example.com`,
+      password: "Test@123456",
+      role: "instructor",
+    };
+
+    const instructor2 = {
+      userName: `instructor2_${Date.now()}`,
+      userEmail: `instructor2_${Date.now()}@example.com`,
+      password: "Test@123456",
+      role: "instructor",
+    };
+
+    const adminUser = {
+      userName: `admin_${Date.now()}`,
+      userEmail: `admin_${Date.now()}@example.com`,
+      password: "Test@123456",
+      role: "admin",
+    };
+
+    const courseTemplate = {
+      instructorName: "Test Instructor",
+      date: new Date(),
+      title: "Ownership Test Course",
+      category: "Technology",
+      level: "beginner",
+      primaryLanguage: "English",
+      subtitle: "Test Course Subtitle",
+      description: "A test course for ownership testing",
+      image: "https://example.com/test-image.jpg",
+      welcomeMessage: "Welcome to the test course!",
+      pricing: 99,
+      courseType: "paid",
+      objectives: "Learn ownership testing",
+      students: [],
+      curriculum: [
+        {
+          title: "Introduction",
+          videoUrl: "https://example.com/test-video.mp4",
+          public_id: "test-public-id",
+          freePreview: true,
+        },
+      ],
+      status: "draft",
+      approvalStatus: "pending",
+    };
+
+    beforeAll(async () => {
+      // Register and approve instructors
+      const User = require("../../models/User");
+
+      // Instructor 1
+      const reg1 = await agent
+        .post("/auth/register")
+        .send(instructor1)
+        .expect(201);
+      await User.findByIdAndUpdate(reg1.body.data.user._id, {
+        status: "approved",
+      });
+      const login1 = await agent
+        .post("/auth/login")
+        .send({
+          userEmail: instructor1.userEmail,
+          password: instructor1.password,
+        })
+        .expect(200);
+      instructor1Token = login1.body.data.accessToken;
+
+      // Instructor 2
+      const reg2 = await agent
+        .post("/auth/register")
+        .send(instructor2)
+        .expect(201);
+      await User.findByIdAndUpdate(reg2.body.data.user._id, {
+        status: "approved",
+      });
+      const login2 = await agent
+        .post("/auth/login")
+        .send({
+          userEmail: instructor2.userEmail,
+          password: instructor2.password,
+        })
+        .expect(200);
+      instructor2Token = login2.body.data.accessToken;
+
+      // Admin
+      const regAdmin = await agent
+        .post("/auth/register")
+        .send(adminUser)
+        .expect(201);
+      const loginAdmin = await agent
+        .post("/auth/login")
+        .send({
+          userEmail: adminUser.userEmail,
+          password: adminUser.password,
+        })
+        .expect(200);
+      adminToken = loginAdmin.body.data.accessToken;
+
+      // Create courses
+      const course1 = {
+        ...courseTemplate,
+        title: "Course 1",
+        instructorId: login1.body.data.user._id,
+      };
+      const course2 = {
+        ...courseTemplate,
+        title: "Course 2",
+        instructorId: login2.body.data.user._id,
+      };
+
+      const res1 = await agent
+        .post("/instructor/course/add")
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .send(course1)
+        .expect(201);
+      course1Id = res1.body.data._id;
+
+      const res2 = await agent
+        .post("/instructor/course/add")
+        .set("Authorization", `Bearer ${instructor2Token}`)
+        .send(course2)
+        .expect(201);
+      course2Id = res2.body.data._id;
+    });
+
+    test("Instructor can only see their own courses in getAllCourses", async () => {
+      const response = await agent
+        .get("/instructor/course/get")
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0]._id).toBe(course1Id);
+    });
+
+    test("Instructor cannot access another instructor's course details", async () => {
+      const response = await agent
+        .get(`/instructor/course/get/details/${course2Id}`)
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "You are not authorized to modify this course"
+      );
+    });
+
+    test("Instructor cannot update another instructor's course", async () => {
+      const response = await agent
+        .put(`/instructor/course/update/${course2Id}`)
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .send({ title: "Hacked Title" })
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "You are not authorized to modify this course"
+      );
+    });
+
+    test("Instructor cannot delete another instructor's course", async () => {
+      const response = await agent
+        .delete(`/instructor/course/delete/${course2Id}`)
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "You are not authorized to modify this course"
+      );
+    });
+
+    test("Instructor cannot publish another instructor's course", async () => {
+      const response = await agent
+        .patch(`/instructor/course/${course2Id}/publish`)
+        .set("Authorization", `Bearer ${instructor1Token}`)
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe(
+        "You are not authorized to modify this course"
+      );
+    });
+
+    test("Admin can access all courses in getAllCourses", async () => {
+      const response = await agent
+        .get("/instructor/course/get")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.length).toBe(2);
+      const courseIds = response.body.data.map((c) => c._id);
+      expect(courseIds).toContain(course1Id);
+      expect(courseIds).toContain(course2Id);
+    });
+
+    test("Admin can access any course details", async () => {
+      const response = await agent
+        .get(`/instructor/course/get/details/${course2Id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data._id).toBe(course2Id);
+    });
+
+    test("Admin can update any course", async () => {
+      const response = await agent
+        .put(`/instructor/course/update/${course2Id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ title: "Admin Updated Title" })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.title).toBe("Admin Updated Title");
+    });
+
+    test("Admin can publish any course", async () => {
+      const response = await agent
+        .patch(`/instructor/course/${course2Id}/publish`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+    });
+
+    test("Admin can delete any course", async () => {
+      const response = await agent
+        .delete(`/instructor/course/delete/${course2Id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
     });
   });
 });

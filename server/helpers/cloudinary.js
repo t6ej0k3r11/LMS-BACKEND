@@ -10,15 +10,20 @@ cloudinary.config({
 });
 
 const uploadMediaToCloudinary = async (filePath) => {
-  console.log("DEBUG: uploadMediaToCloudinary called with filePath:", filePath);
-  console.log("DEBUG: File exists:", fs.existsSync(filePath));
-  if (fs.existsSync(filePath)) {
-    const stats = fs.statSync(filePath);
-    console.log("DEBUG: File stats:", {
-      size: stats.size,
-      sizeMB: (stats.size / 1024 / 1024).toFixed(2),
-      mtime: stats.mtime,
-    });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      "DEBUG: uploadMediaToCloudinary called with filePath:",
+      filePath
+    );
+    console.log("DEBUG: File exists:", fs.existsSync(filePath));
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      console.log("DEBUG: File stats:", {
+        size: stats.size,
+        sizeMB: (stats.size / 1024 / 1024).toFixed(2),
+        mtime: stats.mtime,
+      });
+    }
   }
 
   try {
@@ -31,33 +36,45 @@ const uploadMediaToCloudinary = async (filePath) => {
       process.env.CLOUDINARY_API_SECRET !== "your_cloudinary_api_secret" &&
       process.env.CLOUDINARY_CLOUD_NAME !== "your_cloudinary_cloud_name";
 
-    console.log("DEBUG: Cloudinary credentials valid:", isValidCloudinary);
-    console.log("DEBUG: Cloudinary config:", {
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY ? "***" : "missing",
-      api_secret: process.env.CLOUDINARY_API_SECRET ? "***" : "missing",
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG: Cloudinary credentials valid:", isValidCloudinary);
+      console.log("DEBUG: Cloudinary config:", {
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY ? "***" : "missing",
+        api_secret: process.env.CLOUDINARY_API_SECRET ? "***" : "missing",
+      });
+    }
 
     if (!isValidCloudinary) {
-      console.log("DEBUG: Using local storage instead of Cloudinary");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("DEBUG: Using local storage instead of Cloudinary");
+      }
       // Use local storage instead
       return await uploadMediaLocally(filePath);
     }
 
-    console.log("DEBUG: Uploading to Cloudinary");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG: Uploading to Cloudinary");
+    }
     const result = await cloudinary.uploader.upload(filePath, {
       resource_type: "auto",
     });
-    console.log("DEBUG: Cloudinary upload result:", result);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG: Cloudinary upload result:", result);
+    }
 
     // Cleanup temporary file after successful upload
     fs.unlinkSync(filePath);
-    console.log("DEBUG: Temporary file cleaned up");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG: Temporary file cleaned up");
+    }
 
     return result;
   } catch (error) {
-    console.error("DEBUG: Cloudinary upload error:", error.message || error);
-    console.error("DEBUG: Full error object:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("DEBUG: Cloudinary upload error:", error.message || error);
+      console.error("DEBUG: Full error object:", error);
+    }
     throw new Error(
       `Cloudinary upload failed: ${error.message || "Unknown error"}`
     );

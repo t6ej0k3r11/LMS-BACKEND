@@ -3,8 +3,10 @@ const mongoose = require("mongoose");
 
 const MONGO_URI = process.env.MONGO_URI;
 
-console.log("Testing MongoDB connection...");
-console.log("MONGO_URI:", MONGO_URI ? "Set" : "Not set");
+if (process.env.NODE_ENV !== "production") {
+  console.log("Testing MongoDB connection...");
+  console.log("MONGO_URI:", MONGO_URI ? "Set" : "Not set");
+}
 
 mongoose
   .connect(MONGO_URI, {

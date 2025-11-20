@@ -5,6 +5,11 @@ const QuizAttempt = require("../../models/QuizAttempt");
 const StudentCourses = require("../../models/StudentCourses");
 const Order = require("../../models/Order");
 
+// Helper function to find course with ownership check
+async function findInstructorCourse(courseId, userId) {
+  return Course.findOne({ _id: courseId, instructorId: userId });
+}
+
 const addNewCourse = async (req, res) => {
   try {
     const courseData = req.body;
@@ -13,6 +18,7 @@ const addNewCourse = async (req, res) => {
     courseData.pricing = courseData.pricing || 0;
     courseData.approvalStatus = "pending";
     courseData.status = "draft";
+    courseData.instructorId = req.user._id; // Ensure ownership
 
     const newlyCreatedCourse = new Course(courseData);
     const saveCourse = await newlyCreatedCourse.save();
@@ -35,14 +41,18 @@ const addNewCourse = async (req, res) => {
 
 const getAllCourses = async (req, res) => {
   try {
-    const coursesList = await Course.find({});
+    let query = {};
+    if (req.user.role !== "admin") {
+      query.instructorId = req.user._id;
+    }
+    const coursesList = await Course.find(query);
 
     res.status(200).json({
       success: true,
       data: coursesList,
     });
   } catch (e) {
-    console.error("Error updating course:", e);
+    console.error("Error getting courses:", e);
     res.status(500).json({
       success: false,
       message: "Some error occurred!",
@@ -53,13 +63,32 @@ const getAllCourses = async (req, res) => {
 const getCourseDetailsByID = async (req, res) => {
   try {
     const { id } = req.params;
-    const courseDetails = await Course.findById(id);
+    let courseDetails;
+    if (req.user.role === "admin") {
+      courseDetails = await Course.findById(id);
+    } else {
+      courseDetails = await findInstructorCourse(id, req.user._id);
+      if (!courseDetails) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to modify this course",
+        });
+      }
+    }
 
     if (!courseDetails) {
       return res.status(404).json({
         success: false,
         message: "Course not found!",
       });
+    }
+
+    // Additional ownership check
+    if (
+      req.user.role !== "admin" &&
+      courseDetails.instructorId.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ message: "Not your course" });
     }
 
     res.status(200).json({
@@ -80,18 +109,39 @@ const updateCourseByID = async (req, res) => {
     const { id } = req.params;
     const updatedCourseData = req.body;
 
-    const updatedCourse = await Course.findByIdAndUpdate(
-      id,
-      updatedCourseData,
-      { new: true }
-    );
+    let course;
+    if (req.user.role === "admin") {
+      course = await Course.findById(id);
+    } else {
+      course = await findInstructorCourse(id, req.user._id);
+      if (!course) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to modify this course",
+        });
+      }
+    }
 
-    if (!updatedCourse) {
+    if (!course) {
       return res.status(404).json({
         success: false,
         message: "Course not found!",
       });
     }
+
+    // Additional ownership check
+    if (
+      req.user.role !== "admin" &&
+      course.instructorId.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ message: "Not your course" });
+    }
+
+    const updatedCourse = await Course.findByIdAndUpdate(
+      id,
+      updatedCourseData,
+      { new: true }
+    );
 
     res.status(200).json({
       success: true,
@@ -99,7 +149,7 @@ const updateCourseByID = async (req, res) => {
       data: updatedCourse,
     });
   } catch (e) {
-    console.error("Error getting courses:", e);
+    console.error("Error updating course:", e);
     res.status(500).json({
       success: false,
       message: "Some error occurred!",
@@ -113,7 +163,18 @@ const publishCourse = async (req, res) => {
     const instructorId = req.user._id;
 
     // Find the course and verify ownership
-    const course = await Course.findById(id);
+    let course;
+    if (req.user.role === "admin") {
+      course = await Course.findById(id);
+    } else {
+      course = await findInstructorCourse(id, req.user._id);
+      if (!course) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to modify this course",
+        });
+      }
+    }
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -121,11 +182,14 @@ const publishCourse = async (req, res) => {
       });
     }
 
-    // Check if the instructor owns this course
-    if (course.instructorId !== instructorId) {
+    // Check if the instructor owns this course (skip for admin)
+    if (
+      req.user.role !== "admin" &&
+      course.instructorId.toString() !== instructorId.toString()
+    ) {
       return res.status(403).json({
         success: false,
-        message: "You don't have permission to publish this course!",
+        message: "Not your course",
       });
     }
 
@@ -191,7 +255,18 @@ const deleteCourseByID = async (req, res) => {
     const instructorId = req.user._id;
 
     // Find the course and verify ownership
-    const course = await Course.findById(id);
+    let course;
+    if (req.user.role === "admin") {
+      course = await Course.findById(id);
+    } else {
+      course = await findInstructorCourse(id, req.user._id);
+      if (!course) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to modify this course",
+        });
+      }
+    }
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -199,11 +274,14 @@ const deleteCourseByID = async (req, res) => {
       });
     }
 
-    // Check if the instructor owns this course
-    if (course.instructorId !== instructorId) {
+    // Check if the instructor owns this course (skip for admin)
+    if (
+      req.user.role !== "admin" &&
+      course.instructorId.toString() !== instructorId.toString()
+    ) {
       return res.status(403).json({
         success: false,
-        message: "You don't have permission to delete this course!",
+        message: "Not your course",
       });
     }
 
