@@ -5,6 +5,7 @@ const {
   getCourseDetailsByID,
   updateCourseByID,
   publishCourse,
+  getEnrolledStudents,
   deleteCourseByID,
 } = require("../../controllers/instructor-controller/course-controller");
 const authenticate = require("../../middleware/auth-middleware");
@@ -34,6 +35,7 @@ router.post(
   addNewCourse
 ); // Alias for creating draft
 router.get("/get", checkInstructorApproved, getAllCourses);
+router.get("/get/students", checkInstructorApproved, getEnrolledStudents);
 router.get("/get/details/:id", checkInstructorApproved, getCourseDetailsByID);
 router.put(
   "/update/:id",

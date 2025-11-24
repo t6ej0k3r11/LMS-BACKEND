@@ -4,6 +4,7 @@ const Quiz = require("../../models/Quiz");
 const QuizAttempt = require("../../models/QuizAttempt");
 const StudentCourses = require("../../models/StudentCourses");
 const Order = require("../../models/Order");
+const User = require("../../models/User");
 
 // Helper function to find course with ownership check
 async function findInstructorCourse(courseId, userId) {
@@ -247,6 +248,81 @@ const publishCourse = async (req, res) => {
   }
 };
 
+const getEnrolledStudents = async (req, res) => {
+  try {
+    const instructorId = req.user._id;
+
+    // Get all course IDs created by this instructor
+    const instructorCourses = await Course.find({ instructorId }, "_id title");
+    const courseIds = instructorCourses.map((course) => course._id.toString());
+
+    if (courseIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+      });
+    }
+
+    // Find all StudentCourses where courses contain any of the instructor's courseIds
+    const enrolledStudentCourses = await StudentCourses.find({
+      "courses.courseId": { $in: courseIds },
+    }).populate("userId", "userName userEmail"); // Assuming userId is ObjectId ref to User
+
+    // Wait, StudentCourses.userId is string, not ObjectId. Need to adjust.
+
+    // Since userId is string, can't populate. Need to fetch users separately.
+
+    // Get unique userIds from enrolled students
+    const userIds = [...new Set(enrolledStudentCourses.map((sc) => sc.userId))];
+
+    // Fetch user details
+    const users = await User.find(
+      { _id: { $in: userIds } },
+      "userName userEmail"
+    );
+
+    // Create a map for quick lookup
+    const userMap = users.reduce((map, user) => {
+      map[user._id.toString()] = { name: user.userName, email: user.userEmail };
+      return map;
+    }, {});
+
+    // Build the response data
+    const enrolledStudents = enrolledStudentCourses
+      .map((sc) => {
+        const userInfo = userMap[sc.userId];
+        if (!userInfo) return null;
+
+        const enrolledCourses = sc.courses
+          .filter((course) => courseIds.includes(course.courseId))
+          .map((course) => ({
+            courseId: course.courseId,
+            title: course.title,
+            dateOfPurchase: course.dateOfPurchase,
+          }));
+
+        return {
+          id: sc.userId,
+          name: userInfo.name,
+          email: userInfo.email,
+          enrolledCourses,
+        };
+      })
+      .filter(Boolean);
+
+    res.status(200).json({
+      success: true,
+      data: enrolledStudents,
+    });
+  } catch (e) {
+    console.error("Error getting enrolled students:", e);
+    res.status(500).json({
+      success: false,
+      message: "Some error occurred!",
+    });
+  }
+};
+
 const deleteCourseByID = async (req, res) => {
   try {
     const { id } = req.params;
@@ -326,5 +402,6 @@ module.exports = {
   updateCourseByID,
   getCourseDetailsByID,
   publishCourse,
+  getEnrolledStudents,
   deleteCourseByID,
 };

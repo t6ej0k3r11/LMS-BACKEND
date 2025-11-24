@@ -70,62 +70,154 @@ const sendMessage = async (req, res) => {
 const getChatHistory = async (req, res) => {
   try {
     const { userId, receiverId } = req.params;
-    const { courseId, limit = 50, skip = 0 } = req.query;
+    let { courseId, limit = 50, page = 1 } = req.query;
     const currentUserId = req.user._id;
     const currentUserRole = req.user.role;
+    const mongoose = require("mongoose");
 
-    // For non-admin users, courseId is required
-    if (currentUserRole !== "admin" && !courseId) {
+    // Debug logs
+    console.log("🔍 [getChatHistory] Request params:", {
+      userId,
+      receiverId,
+      rawCourseId: courseId,
+      currentUserId: currentUserId.toString(),
+      currentUserRole,
+    });
+
+    // Validate required params
+    if (!userId || !receiverId) {
+      console.error("❌ [getChatHistory] Missing required params:", {
+        userId,
+        receiverId,
+      });
       return res.status(400).json({
         success: false,
-        message: "courseId is required",
+        message: "userId and receiverId are required",
+      });
+    }
+
+    // Safe ObjectId validation for userId and receiverId
+    if (
+      !mongoose.Types.ObjectId.isValid(userId) ||
+      !mongoose.Types.ObjectId.isValid(receiverId)
+    ) {
+      console.error("❌ [getChatHistory] Invalid ObjectId format:", {
+        userId,
+        receiverId,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid userId or receiverId format",
+      });
+    }
+
+    // Normalize courseId: treat null, "null", undefined, or empty string as null
+    const originalCourseId = courseId;
+    if (
+      courseId === "null" ||
+      courseId === null ||
+      courseId === undefined ||
+      courseId === ""
+    ) {
+      courseId = null;
+    } else if (
+      typeof courseId === "string" &&
+      !mongoose.Types.ObjectId.isValid(courseId)
+    ) {
+      // Treat invalid ObjectId strings as null to ignore filter
+      console.warn(
+        "⚠️ [getChatHistory] Invalid courseId format, treating as null:",
+        courseId
+      );
+      courseId = null;
+    }
+
+    console.log("🔍 [getChatHistory] Parsed courseId:", {
+      original: originalCourseId,
+      parsed: courseId,
+    });
+
+    // For non-admin users, courseId must be provided and valid (not null)
+    if (currentUserRole !== "admin" && courseId === null) {
+      console.error("❌ [getChatHistory] courseId required for non-admin:", {
+        currentUserRole,
+        courseId,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "courseId is required for non-admin users",
       });
     }
 
     // Validate pagination parameters
     const limitNum = parseInt(limit, 10);
-    const skipNum = parseInt(skip, 10);
+    const pageNum = parseInt(page, 10);
     if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      console.error("❌ [getChatHistory] Invalid limit:", limit);
       return res.status(400).json({
         success: false,
         message: "limit must be a number between 1 and 100",
       });
     }
-    if (isNaN(skipNum) || skipNum < 0) {
+    if (isNaN(pageNum) || pageNum < 1) {
+      console.error("❌ [getChatHistory] Invalid page:", page);
       return res.status(400).json({
         success: false,
-        message: "skip must be a non-negative number",
+        message: "page must be a positive number",
       });
     }
+    const skipNum = (pageNum - 1) * limitNum;
 
     // Ensure the current user is part of the conversation
     if (
       currentUserId.toString() !== userId &&
       currentUserId.toString() !== receiverId
     ) {
+      console.error("❌ [getChatHistory] Access denied:", {
+        currentUserId: currentUserId.toString(),
+        userId,
+        receiverId,
+      });
       return res.status(403).json({
         success: false,
         message: "Access denied",
       });
     }
 
-    // For admin, skip course-based permission check if courseId is null
-    if (currentUserRole !== "admin" || courseId) {
-      // Validate permissions for accessing this conversation
-      const { canSendMessage } = require("../../services/messagingPermissions");
-      const hasPermission =
-        (await canSendMessage(userId, receiverId, courseId)) ||
-        (await canSendMessage(receiverId, userId, courseId));
+    // Perform permission check only if courseId is provided (not null)
+    if (courseId !== null) {
+      try {
+        const {
+          canSendMessage,
+        } = require("../../services/messagingPermissions");
+        const hasPermission =
+          (await canSendMessage(userId, receiverId, courseId)) ||
+          (await canSendMessage(receiverId, userId, courseId));
 
-      if (!hasPermission) {
-        return res.status(403).json({
+        if (!hasPermission) {
+          console.error("❌ [getChatHistory] Permission denied:", {
+            userId,
+            receiverId,
+            courseId,
+          });
+          return res.status(403).json({
+            success: false,
+            message: "Unauthorized to access this conversation",
+          });
+        }
+      } catch (permissionError) {
+        console.error(
+          "❌ [getChatHistory] Permission check error:",
+          permissionError
+        );
+        return res.status(500).json({
           success: false,
-          message: "Unauthorized to access this conversation",
+          message: "Error validating permissions",
         });
       }
     }
 
-    // Build query based on whether courseId is provided
+    // Build query for messages between the two users
     const query = {
       $or: [
         { senderId: userId, receiverId: receiverId },
@@ -133,23 +225,62 @@ const getChatHistory = async (req, res) => {
       ],
     };
 
-    // Add courseId to query if provided
-    if (courseId) {
+    // Separate filtering logic: course chat vs personal chat
+    if (courseId !== null) {
+      // Course-based chat: filter by specific courseId
       query.courseId = courseId;
+      console.log("🔍 [getChatHistory] Course chat filter applied");
     } else {
-      // For admin conversations without course context, find messages where courseId is null
+      // Personal/admin chat: filter by courseId null
       query.courseId = null;
+      console.log("🔍 [getChatHistory] Personal chat filter applied");
     }
 
-    // Get total count for pagination
-    const totalMessages = await Message.countDocuments(query);
+    console.log(
+      "🔍 [getChatHistory] Final MongoDB filter:",
+      JSON.stringify(query, null, 2)
+    );
+    console.log("🔍 [getChatHistory] Query details:", {
+      senderId: userId,
+      receiverId: receiverId,
+      courseId: courseId,
+      filter: query,
+    });
 
-    const messages = await Message.find(query)
-      .sort({ createdAt: 1 })
-      .skip(skipNum)
-      .limit(limitNum)
-      .populate("senderId", "userName firstName lastName role")
-      .populate("receiverId", "userName firstName lastName role");
+    // Get total count for pagination
+    let totalMessages;
+    try {
+      totalMessages = await Message.countDocuments(query);
+    } catch (countError) {
+      console.error("❌ [getChatHistory] Count documents error:", countError);
+      return res.status(500).json({
+        success: false,
+        message: "Error counting messages",
+      });
+    }
+
+    let messages;
+    try {
+      messages = await Message.find(query)
+        .sort({ createdAt: 1 })
+        .skip(skipNum)
+        .limit(limitNum)
+        .populate("senderId", "userName firstName lastName role")
+        .populate("receiverId", "userName firstName lastName role");
+    } catch (findError) {
+      console.error("❌ [getChatHistory] Find messages error:", findError);
+      return res.status(500).json({
+        success: false,
+        message: "Error retrieving messages",
+      });
+    }
+
+    console.log("✅ [getChatHistory] Success:", {
+      messageCount: messages.length,
+      totalMessages,
+      limit: limitNum,
+      page: pageNum,
+    });
 
     res.status(200).json({
       success: true,
@@ -159,16 +290,17 @@ const getChatHistory = async (req, res) => {
         pagination: {
           total: totalMessages,
           limit: limitNum,
-          skip: skipNum,
-          hasMore: skipNum + limitNum < totalMessages,
+          page: pageNum,
+          hasMore: messages.length === limitNum,
         },
       },
     });
   } catch (error) {
-    console.error("Get chat history error:", error);
+    console.error("❌ [getChatHistory] Unexpected error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to retrieve chat history",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };

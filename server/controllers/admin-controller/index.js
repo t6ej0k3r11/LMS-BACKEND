@@ -582,8 +582,7 @@ const getRecentActivities = async (req, res) => {
 
     const activities = await AuditLog.find()
       .sort({ timestamp: -1 })
-      .limit(parseInt(limit))
-      .populate("adminId", "userName");
+      .limit(parseInt(limit));
 
     res.status(200).json({
       success: true,
