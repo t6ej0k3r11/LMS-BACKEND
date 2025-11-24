@@ -39,14 +39,6 @@ const validatePasswordStrength = (password) => {
     errors.push("Password should not contain repeated characters");
   }
 
-  const sequentialChars =
-    /(?:012|123|234|345|456|567|678|789|890|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|Abc|Def)/i.test(
-      password
-    );
-  if (sequentialChars) {
-    errors.push("Password should not contain sequential characters");
-  }
-
   // Basic dictionary word check
   const commonWords = [
     "password",
