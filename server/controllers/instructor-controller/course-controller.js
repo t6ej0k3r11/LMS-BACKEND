@@ -88,7 +88,10 @@ const getCourseDetailsByID = async (req, res) => {
       req.user.role !== "admin" &&
       courseDetails.instructorId.toString() !== req.user._id.toString()
     ) {
-      return res.status(403).json({ message: "Not your course" });
+      return res.status(403).json({
+        success: false,
+        message: "Not your course",
+      });
     }
 
     res.status(200).json({
@@ -134,7 +137,10 @@ const updateCourseByID = async (req, res) => {
       req.user.role !== "admin" &&
       course.instructorId.toString() !== req.user._id.toString()
     ) {
-      return res.status(403).json({ message: "Not your course" });
+      return res.status(403).json({
+        success: false,
+        message: "Not your course",
+      });
     }
 
     const updatedCourse = await Course.findByIdAndUpdate(

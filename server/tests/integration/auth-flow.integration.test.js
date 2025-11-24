@@ -1,35 +1,21 @@
 const request = require("supertest");
-const mongoose = require("mongoose");
-const { MongoMemoryServer } = require("mongodb-memory-server");
 
 // Import your app - adjust path as needed
 const app = require("../../server");
-
-let mongoServer;
 
 describe("Authentication Flow Integration Tests", () => {
   let server;
   let agent;
 
   beforeAll(async () => {
-    // Start in-memory MongoDB
-    mongoServer = await MongoMemoryServer.create();
-    const mongoUri = mongoServer.getUri();
-
-    // Connect to test database
-    await mongoose.connect(mongoUri);
-
     // Start the server
     server = app.listen(5001);
     agent = request.agent(server);
   });
 
   afterAll(async () => {
-    // Close server and database
+    // Close server
     server.close();
-    await mongoose.connection.dropDatabase();
-    await mongoose.connection.close();
-    await mongoServer.stop();
   });
 
   beforeEach(async () => {

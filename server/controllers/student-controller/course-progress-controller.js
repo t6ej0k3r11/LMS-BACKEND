@@ -349,9 +349,10 @@ const updateLectureProgress = async (req, res) => {
     const { courseId, lectureId, status = "completed" } = req.body;
 
     if (!courseId || !lectureId) {
-      return res
-        .status(400)
-        .json({ message: "courseId and lectureId are required" });
+      return res.status(400).json({
+        success: false,
+        message: "courseId and lectureId are required",
+      });
     }
 
     // Find or create the course progress document
@@ -367,7 +368,10 @@ const updateLectureProgress = async (req, res) => {
     });
   } catch (error) {
     console.error("Lecture progress update error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 

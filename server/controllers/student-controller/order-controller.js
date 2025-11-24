@@ -13,14 +13,18 @@ const createOrder = async (req, res) => {
     // Fetch course from DB for validation
     const course = await Course.findById(courseId);
     if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
     }
 
     // Check course status and approval
     if (course.status !== "published" || course.approvalStatus !== "approved") {
-      return res
-        .status(400)
-        .json({ message: "Course not available for enrollment" });
+      return res.status(400).json({
+        success: false,
+        message: "Course not available for enrollment",
+      });
     }
 
     const isFreeCourse = course.pricing === 0;
@@ -33,12 +37,18 @@ const createOrder = async (req, res) => {
       (c) => c.courseId === courseId
     );
     if (alreadyEnrolled) {
-      return res.status(400).json({ message: "Already enrolled" });
+      return res.status(400).json({
+        success: false,
+        message: "Already enrolled",
+      });
     }
 
     if (!isFreeCourse) {
       if (!paymentConfirmed) {
-        return res.status(400).json({ message: "Payment required" });
+        return res.status(400).json({
+          success: false,
+          message: "Payment required",
+        });
       }
     }
 
