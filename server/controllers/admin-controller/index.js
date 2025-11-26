@@ -327,7 +327,10 @@ const reviewCourse = async (req, res) => {
     course.approvalDate = new Date();
     course.approvedBy = req.user._id;
 
-    if (action === "reject") {
+    if (action === "approve") {
+      // Set status to published when approving the course
+      course.status = "published";
+    } else if (action === "reject") {
       if (!rejectionReason) {
         return res.status(400).json({
           success: false,
@@ -663,7 +666,11 @@ const updateCourseStatus = async (req, res) => {
     course.approvalDate = new Date();
     course.approvedBy = req.user._id;
 
-    if (approvalStatus === "rejected") {
+    if (approvalStatus === "approved") {
+      // Set status to published when approving the course
+      course.status = "published";
+      course.rejectionReason = undefined;
+    } else if (approvalStatus === "rejected") {
       if (!rejectionReason) {
         return res.status(400).json({
           success: false,
@@ -671,8 +678,6 @@ const updateCourseStatus = async (req, res) => {
         });
       }
       course.rejectionReason = rejectionReason;
-    } else if (approvalStatus === "approved") {
-      course.rejectionReason = undefined;
     }
 
     await course.save();

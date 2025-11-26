@@ -11,6 +11,7 @@ console.log("MONGO_URI set:", !!process.env.MONGO_URI);
 // Routes
 const authRoutes = require("./routes/auth-routes/index");
 const adminRoutes = require("./routes/admin-routes/index");
+const paymentRoutes = require("./routes/payment-routes/index");
 const mediaRoutes = require("./routes/instructor-routes/media-routes");
 const instructorCourseRoutes = require("./routes/instructor-routes/course-routes");
 const instructorQuizRoutes = require("./routes/instructor-routes/quiz-routes");
@@ -35,7 +36,25 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 // =========================
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = [
+        process.env.CLIENT_URL || "http://localhost:3000",
+        "http://localhost:5173",
+        "https://sandbox.sslcommerz.com",
+        "https://securepay.sslcommerz.com",
+        "https://sandbox.aamarpay.com",
+        "https://secure.aamarpay.com",
+      ];
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
@@ -64,6 +83,7 @@ mongoose
 // =========================
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
+app.use("/payments", paymentRoutes);
 app.use("/media", mediaRoutes);
 app.use("/instructor/course", instructorCourseRoutes);
 app.use("/instructor/quiz", instructorQuizRoutes);
