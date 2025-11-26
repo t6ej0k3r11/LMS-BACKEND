@@ -133,12 +133,6 @@ const getCurrentCourseProgress = async (req, res) => {
 
     if (!currentUserCourseProgress) {
       const course = await Course.findById(courseId);
-      if (!course) {
-        return res.status(404).json({
-          success: false,
-          message: "Course not found",
-        });
-      }
 
       return res.status(200).json({
         success: true,
@@ -226,6 +220,8 @@ const getUserCourseProgress = async (req, res) => {
     // Ensure overall progress is calculated
     progress = await calculateOverallProgress(userId, courseId);
 
+    const courseDetails = await Course.findById(courseId);
+
     res.status(200).json({
       success: true,
       data: {
@@ -239,6 +235,7 @@ const getUserCourseProgress = async (req, res) => {
         isCompleted: progress.isCompleted,
         completionDate: progress.completionDate,
         lastUpdated: progress.lastUpdated,
+        courseDetails,
       },
     });
   } catch (error) {
