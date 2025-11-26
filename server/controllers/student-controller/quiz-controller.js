@@ -35,11 +35,21 @@ const getQuizzesByCourse = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
-      "courses.courseId": courseId,
+      userId: studentId.toString(),
     });
 
     if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const courseIndex = studentCourses.courses.findIndex(
+      (item) => item.courseId === courseId
+    );
+
+    if (courseIndex === -1) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Course not purchased.",
@@ -189,7 +199,7 @@ const getQuizById = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
+      userId: studentId.toString(),
       "courses.courseId": quiz.courseId,
     });
 
@@ -346,7 +356,7 @@ const startQuizAttempt = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
+      userId: studentId.toString(),
       "courses.courseId": quiz.courseId,
     });
 
@@ -507,11 +517,21 @@ const submitQuizAttempt = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
-      "courses.courseId": quiz.courseId,
+      userId: studentId.toString(),
     });
 
     if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const courseIndex = studentCourses.courses.findIndex(
+      (item) => item.courseId === quiz.courseId
+    );
+
+    if (courseIndex === -1) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Course not purchased.",
@@ -851,11 +871,21 @@ const getQuizResults = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
-      "courses.courseId": quiz.courseId,
+      userId: studentId.toString(),
     });
 
     if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const courseIndex = studentCourses.courses.findIndex(
+      (item) => item.courseId === quiz.courseId
+    );
+
+    if (courseIndex === -1) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Course not purchased.",
@@ -992,11 +1022,21 @@ const submitQuestionAnswer = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
-      "courses.courseId": quiz.courseId,
+      userId: studentId.toString(),
     });
 
     if (!studentCourses) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Course not purchased.",
+      });
+    }
+
+    const courseIndex = studentCourses.courses.findIndex(
+      (item) => item.courseId === quiz.courseId
+    );
+
+    if (courseIndex === -1) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Course not purchased.",
@@ -1184,7 +1224,7 @@ const finalizeQuizAttempt = async (req, res) => {
 
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
-      userId: studentId,
+      userId: studentId.toString(),
       "courses.courseId": quiz.courseId,
     });
 
