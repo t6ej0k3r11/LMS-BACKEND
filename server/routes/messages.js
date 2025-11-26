@@ -23,7 +23,7 @@ router.get("/partners", async (req, res) => {
     } else if (userRole === "instructor") {
       query = { role: "student" };
     } else if (userRole === "admin") {
-      // Admin gets all users
+      // Admin gets all users regardless of role
       query = {};
     } else {
       return res.status(400).json({
