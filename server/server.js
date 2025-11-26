@@ -27,6 +27,7 @@ const studentViewOrderRoutes = require("./routes/student-routes/order-routes");
 const studentCoursesRoutes = require("./routes/student-routes/student-courses-routes");
 const studentCourseProgressRoutes = require("./routes/student-routes/course-progress-routes");
 const studentQuizRoutes = require("./routes/student-routes/quiz-routes");
+const profileRoutes = require("./routes/profile-routes/index");
 
 const app = express();
 
@@ -89,6 +90,7 @@ app.use("/api/orders", studentViewOrderRoutes);
 app.use("/student/courses-bought", studentCoursesRoutes);
 app.use("/student/course-progress", studentCourseProgressRoutes);
 app.use("/student/quiz", studentQuizRoutes);
+app.use("/profile", profileRoutes);
 
 // Serve uploaded files statically
 app.use("/uploads", express.static("uploads"));

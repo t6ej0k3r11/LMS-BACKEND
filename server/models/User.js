@@ -70,6 +70,54 @@ const UserSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    phone: {
+      type: String,
+      trim: true,
+    },
+    bio: {
+      type: String,
+      maxlength: 500,
+    },
+    location: {
+      type: String,
+      trim: true,
+    },
+    website: {
+      type: String,
+      trim: true,
+    },
+    linkedin: {
+      type: String,
+      trim: true,
+    },
+    github: {
+      type: String,
+      trim: true,
+    },
+    avatar: {
+      type: String, // URL to avatar image
+    },
+    preferences: {
+      emailNotifications: {
+        type: Boolean,
+        default: true,
+      },
+      pushNotifications: {
+        type: Boolean,
+        default: true,
+      },
+      courseUpdates: {
+        type: Boolean,
+        default: true,
+      },
+      marketingEmails: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    deletedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

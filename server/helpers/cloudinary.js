@@ -99,23 +99,8 @@ const uploadMediaLocally = async (filePath) => {
     // Cleanup temporary file after successful local upload
     fs.unlinkSync(filePath);
 
-    // Get the actual port the server is running on with robust fallback
-    const PORT = (() => {
-      // Try ACTUAL_SERVER_PORT first (most specific)
-      if (process.env.ACTUAL_SERVER_PORT) {
-        const port = parseInt(process.env.ACTUAL_SERVER_PORT, 10);
-        if (!isNaN(port) && port > 0 && port < 65536) return port;
-      }
-
-      // Try PORT next
-      if (process.env.PORT) {
-        const port = parseInt(process.env.PORT, 10);
-        if (!isNaN(port) && port > 0 && port < 65536) return port;
-      }
-
-      // Default fallback
-      return 5000;
-    })();
+    // Use fixed port for localhost to avoid port conflicts
+    const PORT = 5000;
 
     // Return local file info in similar format to Cloudinary
     return {
