@@ -23,6 +23,8 @@ const mediaRoutes = require("./routes/instructor-routes/media-routes");
 const instructorCourseRoutes = require("./routes/instructor-routes/course-routes");
 const instructorQuizRoutes = require("./routes/instructor-routes/quiz-routes");
 const instructorApplyRoutes = require("./routes/instructor-routes/apply-routes");
+const instructorEarningsRoutes = require("./routes/instructor-routes/earnings-routes");
+const instructorAnalyticsRoutes = require("./routes/instructor-routes/analytics-routes");
 const studentViewCourseRoutes = require("./routes/student-routes/course-routes");
 const studentViewOrderRoutes = require("./routes/student-routes/order-routes");
 const studentCoursesRoutes = require("./routes/student-routes/student-courses-routes");
@@ -65,7 +67,7 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error('Not allowed by CORS'));
+      return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -105,6 +107,8 @@ app.use("/payments", paymentRoutes);
 app.use("/media", mediaRoutes);
 app.use("/instructor/course", instructorCourseRoutes);
 app.use("/instructor/quiz", instructorQuizRoutes);
+app.use("/instructor/earnings", instructorEarningsRoutes);
+app.use("/instructor/analytics", instructorAnalyticsRoutes);
 app.use("/instructor", instructorApplyRoutes);
 app.use("/student/course", studentViewCourseRoutes);
 app.use("/api/orders", studentViewOrderRoutes);

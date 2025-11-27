@@ -21,12 +21,19 @@ const PaymentSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: "BDT",
-      enum: ["BDT", "USD"],
+      enum: ["BDT"],
     },
     method: {
       type: String,
       required: true,
-      enum: ["sslcommerz", "aamarpay", "bkash_manual", "nagad_manual", "bank_transfer", "cash_office"],
+      enum: [
+        "sslcommerz",
+        "aamarpay",
+        "bkash_manual",
+        "nagad_manual",
+        "bank_transfer",
+        "cash_office",
+      ],
     },
     transactionId: {
       type: String,
