@@ -15,6 +15,69 @@ const addNewCourse = async (req, res) => {
   try {
     const courseData = req.body;
 
+    // Basic validation
+    const requiredFields = [
+      "title",
+      "category",
+      "level",
+      "primaryLanguage",
+      "courseType",
+      "subtitle",
+      "description",
+      "objectives",
+      "welcomeMessage",
+    ];
+    const missingFields = [];
+
+    for (const field of requiredFields) {
+      if (!courseData[field] || courseData[field].toString().trim() === "") {
+        missingFields.push(field);
+      }
+    }
+
+    // Check pricing
+    if (
+      courseData.pricing === undefined ||
+      courseData.pricing === null ||
+      courseData.pricing === ""
+    ) {
+      missingFields.push("pricing");
+    }
+
+    // Check curriculum
+    if (!courseData.curriculum || courseData.curriculum.length === 0) {
+      missingFields.push("at least one lesson in curriculum");
+    } else {
+      let hasFreePreview = false;
+      courseData.curriculum.forEach((item, index) => {
+        if (!item.title || item.title.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} title`);
+        }
+        if (!item.videoUrl || item.videoUrl.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} video URL`);
+        }
+        if (!item.public_id || item.public_id.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} video file`);
+        }
+        if (item.freePreview) {
+          hasFreePreview = true;
+        }
+      });
+
+      if (!hasFreePreview) {
+        missingFields.push("at least one free preview lesson");
+      }
+    }
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot create course. Missing or incomplete: ${missingFields.join(
+          ", "
+        )}`,
+      });
+    }
+
     // Set default values
     courseData.pricing = courseData.pricing || 0;
     courseData.approvalStatus = "pending";
@@ -27,7 +90,7 @@ const addNewCourse = async (req, res) => {
     if (saveCourse) {
       res.status(201).json({
         success: true,
-        message: "Course submitted successfully and is pending admin approval",
+        message: "Course created successfully as draft",
         data: saveCourse,
       });
     }
@@ -35,18 +98,34 @@ const addNewCourse = async (req, res) => {
     console.error("Error adding course:", e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred!",
+      message: e.message || "Some error occurred!",
     });
   }
 };
 
 const getAllCourses = async (req, res) => {
   try {
+    console.log("getAllCourses: Incoming request");
+    console.log("getAllCourses: req.user =", req.user);
+    console.log("getAllCourses: req.user._id =", req.user?._id);
+    console.log("getAllCourses: req.user.role =", req.user?.role);
+
     let query = {};
     if (req.user.role !== "admin") {
       query.instructorId = req.user._id;
     }
+    console.log("getAllCourses: Query =", query);
+
     const coursesList = await Course.find(query);
+    console.log("getAllCourses: Found courses count =", coursesList.length);
+    console.log(
+      "getAllCourses: Courses =",
+      coursesList.map((c) => ({
+        id: c._id,
+        title: c.title,
+        instructorId: c.instructorId,
+      }))
+    );
 
     res.status(200).json({
       success: true,
@@ -209,23 +288,66 @@ const publishCourse = async (req, res) => {
     }
 
     // Check required fields
-    const requiredFields = ["title", "description"];
-    const missingFields = requiredFields.filter(
-      (field) => !course[field] || course[field].trim() === ""
-    );
+    const requiredFields = [
+      "title",
+      "category",
+      "level",
+      "primaryLanguage",
+      "courseType",
+      "subtitle",
+      "description",
+      "objectives",
+      "welcomeMessage",
+    ];
+    const missingFields = [];
 
-    if (missingFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Missing required fields: ${missingFields.join(", ")}`,
-      });
+    for (const field of requiredFields) {
+      if (!course[field] || course[field].toString().trim() === "") {
+        missingFields.push(field);
+      }
+    }
+
+    // Check pricing (must be a valid number)
+    if (
+      course.pricing === undefined ||
+      course.pricing === null ||
+      course.pricing === ""
+    ) {
+      missingFields.push("pricing");
     }
 
     // Check if curriculum has at least one lesson
     if (!course.curriculum || course.curriculum.length === 0) {
+      missingFields.push("at least one lesson in curriculum");
+    } else {
+      // Check curriculum items have required fields
+      let hasFreePreview = false;
+      course.curriculum.forEach((item, index) => {
+        if (!item.title || item.title.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} title`);
+        }
+        if (!item.videoUrl || item.videoUrl.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} video URL`);
+        }
+        if (!item.public_id || item.public_id.trim() === "") {
+          missingFields.push(`Lesson ${index + 1} video file`);
+        }
+        if (item.freePreview) {
+          hasFreePreview = true;
+        }
+      });
+
+      if (!hasFreePreview) {
+        missingFields.push("at least one free preview lesson");
+      }
+    }
+
+    if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Course must have at least one lesson before publishing!",
+        message: `Cannot publish course. Missing or incomplete: ${missingFields.join(
+          ", "
+        )}`,
       });
     }
 
@@ -396,6 +518,34 @@ const deleteCourseByID = async (req, res) => {
   }
 };
 
+const getCoursePrerequisites = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const course = await Course.findById(courseId).populate(
+      "prerequisites",
+      "title _id"
+    );
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: course.prerequisites,
+    });
+  } catch (e) {
+    console.error("Error getting course prerequisites:", e);
+    res.status(500).json({
+      success: false,
+      message: "Some error occurred!",
+    });
+  }
+};
+
 module.exports = {
   addNewCourse,
   getAllCourses,
@@ -404,4 +554,5 @@ module.exports = {
   publishCourse,
   getEnrolledStudents,
   deleteCourseByID,
+  getCoursePrerequisites,
 };

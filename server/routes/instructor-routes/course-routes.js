@@ -7,6 +7,7 @@ const {
   publishCourse,
   getEnrolledStudents,
   deleteCourseByID,
+  getCoursePrerequisites,
 } = require("../../controllers/instructor-controller/course-controller");
 const authenticate = require("../../middleware/auth-middleware");
 const {
@@ -37,6 +38,11 @@ router.post(
 router.get("/get", checkInstructorApproved, getAllCourses);
 router.get("/get/students", checkInstructorApproved, getEnrolledStudents);
 router.get("/get/details/:id", checkInstructorApproved, getCourseDetailsByID);
+router.get(
+  "/get/prerequisites/:courseId",
+  checkInstructorApproved,
+  getCoursePrerequisites
+);
 router.put(
   "/update/:id",
   checkInstructorApproved,

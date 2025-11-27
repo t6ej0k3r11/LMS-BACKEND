@@ -102,6 +102,47 @@ const UserSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    youtube: {
+      type: String,
+      trim: true,
+    },
+    facebook: {
+      type: String,
+      trim: true,
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female", "other", "prefer-not-to-say"],
+    },
+    dateOfBirth: {
+      type: Date,
+    },
+    coverImage: {
+      type: String, // URL to cover/banner image for instructors
+    },
+    payoutDetails: {
+      method: {
+        type: String,
+        enum: ["bkash", "nagad", "bank"],
+      },
+      number: {
+        type: String,
+        trim: true,
+      },
+      accountHolder: {
+        type: String,
+        trim: true,
+      },
+    },
+    expertise: {
+      type: String,
+      trim: true,
+    },
+    languagePreference: {
+      type: String,
+      default: "en",
+      trim: true,
+    },
     avatar: {
       type: String, // URL to avatar image
     },
