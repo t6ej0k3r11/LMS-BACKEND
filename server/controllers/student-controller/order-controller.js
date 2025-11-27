@@ -2,6 +2,8 @@ const paypal = require("../../helpers/paypal");
 const Order = require("../../models/Order");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
+const Transaction = require("../../models/Transaction");
+const CommissionService = require("../../services/commissionService");
 
 const createOrder = async (req, res) => {
   try {
@@ -207,6 +209,28 @@ const createOrder = async (req, res) => {
 
     await newlyCreatedCourseOrder.save();
 
+    // Calculate commission and create transaction record
+    const commissionPercent = await CommissionService.getCommissionPercent(
+      instructorId
+    );
+    const earnings = CommissionService.calculateEarnings(
+      coursePricing,
+      commissionPercent
+    );
+
+    const transaction = new Transaction({
+      courseId,
+      instructorId,
+      studentId,
+      amount: coursePricing,
+      commissionPercent,
+      platformCommission: earnings.platformCommission,
+      instructorEarnings: earnings.instructorEarnings,
+      status: "success",
+    });
+
+    await transaction.save();
+
     // Directly enroll the student
     let studentCourses = await StudentCourses.findOne({
       userId: studentId,
@@ -288,6 +312,39 @@ const capturePaymentAndFinalizeOrder = async (req, res) => {
     order.payerId = payerId;
 
     await order.save();
+
+    // Create transaction record for paid courses
+    if (order.coursePricing > 0) {
+      // Check if transaction already exists
+      const existingTransaction = await Transaction.findOne({
+        courseId: order.courseId,
+        studentId: order.userId,
+        status: "success",
+      });
+
+      if (!existingTransaction) {
+        const commissionPercent = await CommissionService.getCommissionPercent(
+          order.instructorId
+        );
+        const earnings = CommissionService.calculateEarnings(
+          order.coursePricing,
+          commissionPercent
+        );
+
+        const transaction = new Transaction({
+          courseId: order.courseId,
+          instructorId: order.instructorId,
+          studentId: order.userId,
+          amount: order.coursePricing,
+          commissionPercent,
+          platformCommission: earnings.platformCommission,
+          instructorEarnings: earnings.instructorEarnings,
+          status: "success",
+        });
+
+        await transaction.save();
+      }
+    }
 
     //update out student course model
     const studentCourses = await StudentCourses.findOne({

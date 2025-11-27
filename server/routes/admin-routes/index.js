@@ -27,6 +27,20 @@ const {
   deleteQuestion,
 } = require("../../controllers/admin-controller/index");
 
+const {
+  createPayout,
+  markPayoutAsPaid,
+  getPayouts,
+  getPayoutById,
+} = require("../../controllers/admin-controller/payout-controller");
+
+const {
+  getRevenueReport,
+  getInstructorEarningsReport,
+  getCourseEarningsReport,
+  getEarningsSummary,
+} = require("../../controllers/admin-controller/earnings-report-controller");
+
 // Apply admin middleware to all routes
 router.use(verifyAdminToken);
 
@@ -68,5 +82,17 @@ router.post("/questions", createQuestion);
 router.get("/questions", getAllQuestions);
 router.patch("/questions/:id", updateQuestion);
 router.delete("/questions/:id", deleteQuestion);
+
+// Payout management routes
+router.post("/payout/create", createPayout);
+router.put("/payout/mark-paid/:id", markPayoutAsPaid);
+router.get("/payouts", getPayouts);
+router.get("/payout/:id", getPayoutById);
+
+// Earnings reporting routes
+router.get("/earnings/summary", getEarningsSummary);
+router.get("/earnings/revenue-report", getRevenueReport);
+router.get("/earnings/instructor-report", getInstructorEarningsReport);
+router.get("/earnings/course-report", getCourseEarningsReport);
 
 module.exports = router;
