@@ -11,7 +11,10 @@ const createOrder = async (req, res) => {
     const userEmail = req.user.userEmail;
 
     // Fetch course from DB for validation
-    const course = await Course.findById(courseId);
+    const course = await Course.findById(courseId).populate(
+      "prerequisites",
+      "title _id"
+    );
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -25,6 +28,45 @@ const createOrder = async (req, res) => {
         success: false,
         message: "Course not available for enrollment",
       });
+    }
+
+    // Check prerequisites
+    if (course.prerequisites && course.prerequisites.length > 0) {
+      const studentCourses = await StudentCourses.findOne({
+        userId: studentId,
+      });
+      const CourseProgress = require("../../models/CourseProgress");
+
+      const missingPrerequisites = [];
+
+      for (const prereq of course.prerequisites) {
+        const isEnrolled = studentCourses?.courses?.some(
+          (c) => c.courseId === prereq._id.toString()
+        );
+        if (!isEnrolled) {
+          missingPrerequisites.push(prereq.title);
+          continue;
+        }
+
+        // Check if completed
+        const progress = await CourseProgress.findOne({
+          userId: studentId,
+          courseId: prereq._id.toString(),
+        });
+
+        if (!progress || !progress.completed) {
+          missingPrerequisites.push(prereq.title);
+        }
+      }
+
+      if (missingPrerequisites.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `You must complete these prerequisite courses before enrolling: ${missingPrerequisites.join(
+            ", "
+          )}`,
+        });
+      }
     }
 
     const isFreeCourse = course.pricing === 0;

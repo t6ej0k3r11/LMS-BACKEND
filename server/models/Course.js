@@ -62,6 +62,12 @@ const CourseSchema = new mongoose.Schema({
       ref: "Quiz",
     },
   ],
+  prerequisites: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Course",
+    },
+  ],
   status: {
     type: String,
     enum: ["draft", "submitted", "published"],
