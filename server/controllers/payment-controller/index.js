@@ -8,6 +8,7 @@ const { initiateAamarPayPayment } = require("../../utils/aamarpay");
 const multer = require("multer");
 const path = require("path");
 const PAYMENT_CONFIG = require("../../config/paymentConfig");
+const { createFileFilter, createLimits } = require("../../middleware/fileValidation");
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -20,21 +21,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = PAYMENT_CONFIG.FILE_UPLOAD.ALLOWED_TYPES;
-  const mimetype = allowedTypes.includes(file.mimetype);
-
-  if (mimetype) {
-    return cb(null, true);
-  } else {
-    cb(new Error("Only .png, .jpg, .jpeg and .pdf files are allowed!"));
-  }
-};
-
 const upload = multer({
   storage: storage,
-  limits: { fileSize: PAYMENT_CONFIG.FILE_UPLOAD.MAX_SIZE },
-  fileFilter: fileFilter,
+  fileFilter: createFileFilter(['image', 'document']),
+  limits: createLimits(['image', 'document'])
 });
 
 // Generate unique transaction ID

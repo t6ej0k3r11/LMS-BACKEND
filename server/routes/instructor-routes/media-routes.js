@@ -8,6 +8,7 @@ const authenticate = require("../../middleware/auth-middleware");
 const {
   checkInstructorApproved,
 } = require("../../middleware/instructor-middleware");
+const { validateBulkFiles, createFileFilter, createLimits } = require("../../middleware/fileValidation");
 
 const router = express.Router();
 
@@ -16,83 +17,36 @@ router.use(authenticate.authenticate);
 // Apply instructor approval check to all routes (requires approved instructor)
 router.use(checkInstructorApproved);
 
-const upload = multer({ dest: "uploads/" });
+// Configure multer for media uploads (allows all file types)
+const upload = multer({
+  dest: "uploads/",
+  fileFilter: createFileFilter(['image', 'video', 'document', 'zip']),
+  limits: createLimits(['image', 'video', 'document', 'zip'])
+});
+
+const bulkUpload = multer({
+  dest: "uploads/",
+  fileFilter: createFileFilter(['image', 'video', 'document', 'zip']),
+  limits: createLimits(['image', 'video', 'document', 'zip'])
+});
 
 router.post("/upload", upload.single("file"), async (req, res) => {
-  console.log("DEBUG: /media/upload endpoint called");
-  console.log("DEBUG: Request file details:", {
-    filename: req.file?.filename,
-    originalname: req.file?.originalname,
-    mimetype: req.file?.mimetype,
-    size: req.file?.size,
-    sizeMB: req.file ? (req.file.size / 1024 / 1024).toFixed(2) : null,
-    path: req.file?.path,
-  });
-  console.log("DEBUG: Request headers:", req.headers);
-  console.log("DEBUG: Request body:", req.body);
-
   try {
-    // Validate file
     if (!req.file) {
-      console.log("DEBUG: No file provided in request");
       return res.status(400).json({
         success: false,
         message: "No file provided",
       });
     }
 
-    // File type validation
-    const allowedTypes = [
-      "application/pdf",
-      "video/mp4",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "image/jpeg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-    ];
-    console.log(
-      "DEBUG: Server-side validation - allowedTypes:",
-      allowedTypes,
-      "fileType:",
-      req.file.mimetype
-    );
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      console.log("DEBUG: File type validation failed on server");
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid file type. Allowed types: PDF, MP4, DOCX, JPEG, PNG, GIF, WebP",
-      });
-    }
-
-    // File size validation (50MB limit)
-    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-    console.log(
-      "DEBUG: Server-side validation - maxSize:",
-      maxSize,
-      "fileSize:",
-      req.file.size
-    );
-    if (req.file.size > maxSize) {
-      console.log("DEBUG: File size validation failed on server");
-      return res.status(400).json({
-        success: false,
-        message: "File too large. Maximum size allowed is 50MB",
-      });
-    }
-
-    console.log("DEBUG: Calling uploadMediaToCloudinary");
     const result = await uploadMediaToCloudinary(req.file.path);
-    console.log("DEBUG: uploadMediaToCloudinary result:", result);
 
     res.status(200).json({
       success: true,
       data: result,
     });
   } catch (e) {
-    console.error("DEBUG: Upload error:", e.message || e);
-    console.error("DEBUG: Full error object:", e);
+    console.error("Upload error:", e.message || e);
     res.status(500).json({
       success: false,
       message: e.message || "Error uploading file",
@@ -126,49 +80,12 @@ router.delete("/delete/:id", async (req, res) => {
   }
 });
 
-router.post("/bulk-upload", upload.array("files", 10), async (req, res) => {
+router.post("/bulk-upload", bulkUpload.array("files", 10), async (req, res) => {
   try {
-    // Validate files
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
         message: "No files provided",
-      });
-    }
-
-    // File validation for each file
-    const allowedTypes = [
-      "application/pdf",
-      "video/mp4",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "image/jpeg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-    ];
-    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-
-    const validationErrors = [];
-    req.files.forEach((file, index) => {
-      if (!allowedTypes.includes(file.mimetype)) {
-        validationErrors.push(
-          `File ${index + 1}: Invalid type (${file.mimetype})`
-        );
-      }
-      if (file.size > maxSize) {
-        validationErrors.push(
-          `File ${index + 1}: Too large (${(file.size / 1024 / 1024).toFixed(
-            2
-          )}MB)`
-        );
-      }
-    });
-
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: validationErrors,
       });
     }
 

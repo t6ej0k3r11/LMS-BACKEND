@@ -62,8 +62,8 @@ const PAYMENT_CONFIG = {
 
   // File Upload
   FILE_UPLOAD: {
-    MAX_SIZE: 5 * 1024 * 1024, // 5MB
-    ALLOWED_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'],
+    MAX_SIZE: 20 * 1024 * 1024, // 20MB for documents
+    ALLOWED_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'],
     UPLOAD_PATH: 'uploads/',
   },
 

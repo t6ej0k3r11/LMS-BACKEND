@@ -25,6 +25,7 @@ const {
   validatePaymentStatusUpdate,
   validateAdminNote,
 } = require("../../middleware/validation-middleware");
+const { createFileFilter, createLimits } = require("../../middleware/fileValidation");
 const PAYMENT_CONFIG = require("../../config/paymentConfig");
 
 // Configure multer for file uploads
@@ -38,21 +39,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = PAYMENT_CONFIG.FILE_UPLOAD.ALLOWED_TYPES;
-  const mimetype = allowedTypes.includes(file.mimetype);
-
-  if (mimetype) {
-    return cb(null, true);
-  } else {
-    cb(new Error("Only .png, .jpg, .jpeg and .pdf files are allowed!"));
-  }
-};
-
 const upload = multer({
   storage: storage,
-  limits: { fileSize: PAYMENT_CONFIG.FILE_UPLOAD.MAX_SIZE },
-  fileFilter: fileFilter,
+  fileFilter: createFileFilter(['image', 'document']),
+  limits: createLimits(['image', 'document'])
 });
 
 const router = express.Router();
