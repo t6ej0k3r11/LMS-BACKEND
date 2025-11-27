@@ -10,10 +10,8 @@ const messageRateLimit = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  // Use IP address for rate limiting
-  keyGenerator: (req) => {
-    return req.ip;
-  },
+  // Use IP address for rate limiting with IPv6 support
+  keyGenerator: rateLimit.ipKeyGenerator,
   // Skip successful requests and only count failures
   skipSuccessfulRequests: false,
   // Skip failed requests and only count successes

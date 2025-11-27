@@ -20,6 +20,14 @@ const UserSchema = new mongoose.Schema(
         "Please enter a valid email",
       ],
     },
+    mobile: {
+      type: String,
+      trim: true,
+      match: [
+        /^(\+880|880|0)?1[3-9]\d{8}$/,
+        "Please enter a valid Bangladeshi mobile number",
+      ],
+    },
     password: {
       type: String,
       required: true,

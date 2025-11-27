@@ -196,6 +196,63 @@ const validateProgressUpdate = [
   handleValidationErrors,
 ];
 
+// Validation rules for online payment initialization
+const validateOnlinePaymentInit = [
+  body("courseId")
+    .isMongoId()
+    .withMessage("Valid course ID is required"),
+
+  body("method")
+    .isIn(["sslcommerz", "aamarpay"])
+    .withMessage("Payment method must be sslcommerz or aamarpay"),
+
+  handleValidationErrors,
+];
+
+// Validation rules for offline payment submission
+const validateOfflinePaymentSubmit = [
+  body("courseId")
+    .isMongoId()
+    .withMessage("Valid course ID is required"),
+
+  body("method")
+    .isIn(["bkash_manual", "nagad_manual", "bank_transfer", "cash_office"])
+    .withMessage("Invalid payment method for offline payment"),
+
+  body("amount")
+    .isFloat({ min: 0 })
+    .withMessage("Amount must be a positive number"),
+
+  handleValidationErrors,
+];
+
+// Validation rules for payment status update
+const validatePaymentStatusUpdate = [
+  body("status")
+    .isIn(["pending", "processing", "verified", "failed", "cancelled"])
+    .withMessage("Invalid payment status"),
+
+  body("adminNote")
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage("Admin note must not exceed 500 characters"),
+
+  handleValidationErrors,
+];
+
+// Validation rules for admin note (for verification/rejection)
+const validateAdminNote = [
+  body("adminNote")
+    .trim()
+    .notEmpty()
+    .withMessage("Admin note is required")
+    .isLength({ max: 500 })
+    .withMessage("Admin note must not exceed 500 characters"),
+
+  handleValidationErrors,
+];
+
 module.exports = {
   validateRegistration,
   validateLogin,
@@ -205,5 +262,9 @@ module.exports = {
   validateProgressUpdate,
   validatePasswordResetRequest,
   validatePasswordReset,
+  validateOnlinePaymentInit,
+  validateOfflinePaymentSubmit,
+  validatePaymentStatusUpdate,
+  validateAdminNote,
   handleValidationErrors,
 };
