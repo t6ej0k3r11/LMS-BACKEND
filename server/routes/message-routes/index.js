@@ -5,7 +5,7 @@ const {
   markMessagesAsSeen,
   getChatPartnersList,
 } = require("../../controllers/message-controller/index");
-const authenticateMiddleware = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const {
   messageRateLimit,
 } = require("../../middleware/message-rate-limit-middleware");
@@ -13,7 +13,7 @@ const {
 const router = express.Router();
 
 // All message routes require authentication
-router.use(authenticateMiddleware.authenticate);
+router.use(authenticate);
 
 // Get all chat partners
 router.get("/list", getChatPartnersList);

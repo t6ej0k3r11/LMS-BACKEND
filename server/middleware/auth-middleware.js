@@ -5,12 +5,18 @@ const verifyToken = (token, secretKey) => {
 };
 
 const authenticate = (req, res, next) => {
-  console.log("authenticate: Incoming request to", req.path);
+  if (process.env.NODE_ENV !== "production") {
+    console.log("authenticate: Incoming request to", req.path);
+  }
   const authHeader = req.headers.authorization;
-  console.log("authenticate: authHeader =", authHeader);
+  if (process.env.NODE_ENV !== "production") {
+    console.log("authenticate: authHeader =", authHeader);
+  }
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("authenticate: Authorization header missing or invalid");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("authenticate: Authorization header missing or invalid");
+    }
     return res.status(401).json({
       success: false,
       message: "Authorization header missing or invalid",
@@ -18,10 +24,14 @@ const authenticate = (req, res, next) => {
   }
 
   const token = authHeader.split(" ")[1];
-  console.log("authenticate: token =", token ? "present" : "missing");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("authenticate: token =", token ? "present" : "missing");
+  }
 
   if (!token) {
-    console.log("authenticate: Access token is required");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("authenticate: Access token is required");
+    }
     return res.status(401).json({
       success: false,
       message: "Access token is required",
@@ -30,16 +40,20 @@ const authenticate = (req, res, next) => {
 
   try {
     const payload = verifyToken(token, process.env.JWT_SECRET);
-    console.log("authenticate: payload =", {
-      _id: payload._id,
-      role: payload.role,
-      email: payload.email,
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("authenticate: payload =", {
+        _id: payload._id,
+        role: payload.role,
+        email: payload.userEmail,
+      });
+    }
 
     // Check if token is expired
     const currentTime = Math.floor(Date.now() / 1000);
     if (payload.exp && payload.exp < currentTime) {
-      console.log("authenticate: Access token has expired");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("authenticate: Access token has expired");
+      }
       return res.status(401).json({
         success: false,
         message: "Access token has expired",
@@ -47,13 +61,17 @@ const authenticate = (req, res, next) => {
     }
 
     req.user = payload;
-    console.log("authenticate: Authentication successful, proceeding");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("authenticate: Authentication successful, proceeding");
+    }
     next();
   } catch (error) {
-    console.log(
-      "authenticate: Invalid or expired token, error =",
-      error.message
-    );
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        "authenticate: Invalid or expired token, error =",
+        error.message
+      );
+    }
     return res.status(401).json({
       success: false,
       message: "Invalid or expired token",

@@ -114,31 +114,70 @@ const getStudentViewCourseDetails = async (req, res) => {
 const checkCoursePurchaseInfo = async (req, res) => {
   try {
     const { id, studentId } = req.params;
+
     const studentCourses = await StudentCourses.findOne({
       userId: studentId,
     });
 
-    // If no student courses record exists, student hasn't bought any courses
-    if (!studentCourses) {
-      return res.status(200).json({
-        success: true,
-        data: { enrolled: false, completed: false },
-      });
+    let enrolled = false;
+    let completed = false;
+
+    // Check StudentCourses first
+    if (studentCourses) {
+      const courseIndex = studentCourses.courses.findIndex(
+        (item) => item.courseId === id
+      );
+      enrolled = courseIndex > -1;
+
+      if (enrolled) {
+        const CourseProgress = require("../../models/CourseProgress");
+        const progress = await CourseProgress.findOne({
+          userId: studentId,
+          courseId: id,
+        });
+        completed = progress?.completed || false;
+      }
     }
 
-    const courseIndex = studentCourses.courses.findIndex(
-      (item) => item.courseId === id
-    );
-    const enrolled = courseIndex > -1;
+    // If not enrolled according to StudentCourses, check Course.students as fallback
+    // and sync if found
+    if (!enrolled) {
+      const course = await Course.findById(id);
+      if (course) {
+        const isEnrolledInCourse = course.students.some(
+          (student) => student.studentId === studentId
+        );
 
-    let completed = false;
-    if (enrolled) {
-      const CourseProgress = require("../../models/CourseProgress");
-      const progress = await CourseProgress.findOne({
-        userId: studentId,
-        courseId: id,
-      });
-      completed = progress?.completed || false;
+        if (isEnrolledInCourse) {
+          // Sync: add to StudentCourses
+          enrolled = true;
+
+          if (!studentCourses) {
+            const newStudentCourses = new StudentCourses({
+              userId: studentId,
+              courses: [{
+                courseId: id,
+                title: course.title,
+                instructorId: course.instructorId,
+                instructorName: course.instructorName,
+                dateOfPurchase: new Date(),
+                courseImage: course.image,
+              }]
+            });
+            await newStudentCourses.save();
+          } else {
+            studentCourses.courses.push({
+              courseId: id,
+              title: course.title,
+              instructorId: course.instructorId,
+              instructorName: course.instructorName,
+              dateOfPurchase: new Date(),
+              courseImage: course.image,
+            });
+            await studentCourses.save();
+          }
+        }
+      }
     }
 
     res.status(200).json({

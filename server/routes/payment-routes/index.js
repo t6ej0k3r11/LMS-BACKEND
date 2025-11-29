@@ -16,7 +16,7 @@ const {
   getMyPayments,
   getPaymentDetails,
 } = require("../../controllers/payment-controller/index");
-const authenticateMiddleware = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const { verifyAdminToken } = require("../../middleware/admin-middleware");
 const { paymentInitRateLimit } = require("../../middleware/payment-middleware");
 const {
@@ -41,8 +41,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  fileFilter: createFileFilter(['image', 'document']),
-  limits: createLimits(['image', 'document'])
+  fileFilter: createFileFilter(['IMAGE', 'DOCUMENT']),
+  limits: createLimits(['IMAGE', 'DOCUMENT'])
 });
 
 const router = express.Router();
@@ -52,7 +52,7 @@ const router = express.Router();
 // =========================
 router.post(
   "/online/init",
-  authenticateMiddleware.authenticate,
+  authenticate,
   paymentInitRateLimit,
   validateOnlinePaymentInit,
   initOnlinePayment
@@ -67,7 +67,7 @@ router.get("/online/cancel", handlePaymentCancel);
 // =========================
 router.post(
   "/offline/submit",
-  authenticateMiddleware.authenticate,
+  authenticate,
   upload.single(PAYMENT_CONFIG.FIELDS.PROOF_FILE),
   validateOfflinePaymentSubmit,
   submitOfflinePayment
@@ -75,21 +75,21 @@ router.post(
 
 router.get(
   "/offline/list",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   listPendingOfflinePayments
 );
 
 router.patch(
   "/offline/verify/:id",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   verifyOfflinePayment
 );
 
 router.patch(
   "/offline/reject/:id",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   validateAdminNote,
   rejectOfflinePayment
@@ -100,21 +100,21 @@ router.patch(
 // =========================
 router.get(
   "/admin",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   getAllPayments
 );
 
 router.get(
   "/admin/:id",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   getPaymentById
 );
 
 router.put(
   "/admin/update-status/:id",
-  authenticateMiddleware.authenticate,
+  authenticate,
   verifyAdminToken,
   validatePaymentStatusUpdate,
   updatePaymentStatus
@@ -125,13 +125,13 @@ router.put(
 // =========================
 router.get(
   "/my-payments",
-  authenticateMiddleware.authenticate,
+  authenticate,
   getMyPayments
 );
 
 router.get(
   "/details/:id",
-  authenticateMiddleware.authenticate,
+  authenticate,
   getPaymentDetails
 );
 

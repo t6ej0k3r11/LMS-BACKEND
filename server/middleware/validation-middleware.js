@@ -4,16 +4,30 @@ const { body, validationResult } = require("express-validator");
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    console.log("DEBUG: Validation errors:", errors.array());
-    return res.status(400).json({
+    if (process.env.NODE_ENV !== "production") {
+      console.log("DEBUG: Validation errors:", errors.array());
+      console.log("DEBUG: Request body:", req.body);
+      console.log("DEBUG: Request file:", req.file ? req.file.filename : 'No file');
+    }
+
+    const errorDetails = {
       success: false,
       message: "Validation failed",
-      errors: errors.array().map((err) => ({
+      validationErrors: errors.array().map((err) => ({
         field: err.path,
         message: err.msg,
         value: err.value,
       })),
-    });
+      requestBody: req.body,
+      hasFile: !!req.file,
+      fileInfo: req.file ? {
+        filename: req.file.filename,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      } : null
+    };
+
+    return res.status(400).json(errorDetails);
   }
   next();
 };
@@ -151,6 +165,24 @@ const validateQuizSubmission = [
 ];
 
 // Validation rules for course progress update
+const validateProgressUpdate = [
+  body("courseId").isMongoId().withMessage("Valid course ID is required"),
+
+  body("lectureId").isMongoId().withMessage("Valid lecture ID is required"),
+
+  body("progressValue")
+    .optional()
+    .isFloat({ min: 0, max: 1 })
+    .withMessage("Progress value must be between 0 and 1"),
+
+  body("isRewatch")
+    .optional()
+    .isBoolean()
+    .withMessage("isRewatch must be a boolean"),
+
+  handleValidationErrors,
+];
+
 // Validation rules for password reset request
 const validatePasswordResetRequest = [
   body("email")
@@ -176,26 +208,6 @@ const validatePasswordReset = [
   handleValidationErrors,
 ];
 
-const validateProgressUpdate = [
-  body("userId").isMongoId().withMessage("Valid user ID is required"),
-
-  body("courseId").isMongoId().withMessage("Valid course ID is required"),
-
-  body("lectureId").isMongoId().withMessage("Valid lecture ID is required"),
-
-  body("progressValue")
-    .optional()
-    .isFloat({ min: 0, max: 1 })
-    .withMessage("Progress value must be between 0 and 1"),
-
-  body("isRewatch")
-    .optional()
-    .isBoolean()
-    .withMessage("isRewatch must be a boolean"),
-
-  handleValidationErrors,
-];
-
 // Validation rules for online payment initialization
 const validateOnlinePaymentInit = [
   body("courseId")
@@ -212,14 +224,17 @@ const validateOnlinePaymentInit = [
 // Validation rules for offline payment submission
 const validateOfflinePaymentSubmit = [
   body("courseId")
+    .trim()
     .isMongoId()
     .withMessage("Valid course ID is required"),
 
   body("method")
+    .trim()
     .isIn(["bkash_manual", "nagad_manual", "bank_transfer", "cash_office"])
     .withMessage("Invalid payment method for offline payment"),
 
   body("amount")
+    .trim()
     .isFloat({ min: 0 })
     .withMessage("Amount must be a positive number"),
 

@@ -8,12 +8,22 @@ module.exports = async () => {
   // Set test environment
   process.env.NODE_ENV = "test";
 
+  // Set test environment variables
+  process.env.JWT_SECRET = "test_jwt_secret_for_testing_only";
+  process.env.JWT_REFRESH_SECRET = "test_jwt_refresh_secret_for_testing_only";
+  process.env.MONGO_URI = "test_mongo_uri"; // Will be overridden by in-memory server
+  process.env.CLIENT_URL = "http://localhost:3000";
+  process.env.FRONTEND_URL = "http://localhost:3000";
+
   // Start in-memory MongoDB server
   const mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
 
   // Store mongoServer instance globally so it can be accessed in teardown
   global.__MONGOSERVER__ = mongoServer;
+
+  // Set MONGO_URI to the in-memory database URI
+  process.env.MONGO_URI = mongoUri;
 
   // Connect to the in-memory database
   await mongoose.connect(mongoUri);

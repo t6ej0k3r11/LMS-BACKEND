@@ -4,7 +4,7 @@ const {
   uploadMediaToCloudinary,
   deleteMediaFromCloudinary,
 } = require("../../helpers/cloudinary");
-const authenticate = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const {
   checkInstructorApproved,
 } = require("../../middleware/instructor-middleware");
@@ -13,7 +13,7 @@ const { validateBulkFiles, createFileFilter, createLimits } = require("../../mid
 const router = express.Router();
 
 // Apply authentication middleware to all routes
-router.use(authenticate.authenticate);
+router.use(authenticate);
 // Apply instructor approval check to all routes (requires approved instructor)
 router.use(checkInstructorApproved);
 

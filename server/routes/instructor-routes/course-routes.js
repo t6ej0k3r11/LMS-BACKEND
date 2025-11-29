@@ -9,7 +9,7 @@ const {
   deleteCourseByID,
   getCoursePrerequisites,
 } = require("../../controllers/instructor-controller/course-controller");
-const authenticate = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const {
   checkInstructorRole,
   checkInstructorApproved,
@@ -20,7 +20,7 @@ const {
 const router = express.Router();
 
 // Apply authentication middleware to all routes
-router.use(authenticate.authenticate);
+router.use(authenticate);
 
 // Course creation and management (require approved instructor)
 router.post(

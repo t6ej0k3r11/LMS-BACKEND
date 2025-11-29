@@ -192,12 +192,58 @@ const getUserCourseProgress = async (req, res) => {
 
     const studentPurchasedCourses = await StudentCourses.findOne({ userId });
 
-    const isCurrentCoursePurchasedByCurrentUserOrNot =
-      studentPurchasedCourses?.courses?.findIndex(
-        (item) => item.courseId === courseId
-      ) > -1;
+    let enrolled = false;
 
-    if (!isCurrentCoursePurchasedByCurrentUserOrNot) {
+    // Check StudentCourses first
+    if (studentPurchasedCourses) {
+      const courseIndex = studentPurchasedCourses.courses.findIndex(
+        (item) => item.courseId === courseId
+      );
+      enrolled = courseIndex > -1;
+    }
+
+    // If not enrolled according to StudentCourses, check Course.students as fallback
+    // and sync if found
+    if (!enrolled) {
+      const course = await Course.findById(courseId);
+      if (course) {
+        const isEnrolledInCourse = course.students.some(
+          (student) => student.studentId === userId.toString()
+        );
+
+        if (isEnrolledInCourse) {
+          // Sync: add to StudentCourses
+          enrolled = true;
+
+          if (!studentPurchasedCourses) {
+            const newStudentCourses = new StudentCourses({
+              userId: userId.toString(),
+              courses: [{
+                courseId: courseId,
+                title: course.title,
+                instructorId: course.instructorId,
+                instructorName: course.instructorName,
+                dateOfPurchase: new Date(),
+                courseImage: course.image,
+              }]
+            });
+            await newStudentCourses.save();
+          } else {
+            studentPurchasedCourses.courses.push({
+              courseId: courseId,
+              title: course.title,
+              instructorId: course.instructorId,
+              instructorName: course.instructorName,
+              dateOfPurchase: new Date(),
+              courseImage: course.image,
+            });
+            await studentPurchasedCourses.save();
+          }
+        }
+      }
+    }
+
+    if (!enrolled) {
       return res.status(403).json({
         success: false,
         message: "You need to purchase this course to access it.",

@@ -38,18 +38,58 @@ const getQuizzesByCourse = async (req, res) => {
       userId: studentId.toString(),
     });
 
-    if (!studentCourses) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Course not purchased.",
-      });
+    let enrolled = false;
+
+    // Check StudentCourses first
+    if (studentCourses) {
+      const courseIndex = studentCourses.courses.findIndex(
+        (item) => item.courseId === courseId
+      );
+      enrolled = courseIndex > -1;
     }
 
-    const courseIndex = studentCourses.courses.findIndex(
-      (item) => item.courseId === courseId
-    );
+    // If not enrolled according to StudentCourses, check Course.students as fallback
+    // and sync if found
+    if (!enrolled) {
+      const course = await Course.findById(courseId);
+      if (course) {
+        const isEnrolledInCourse = course.students.some(
+          (student) => student.studentId === studentId.toString()
+        );
 
-    if (courseIndex === -1) {
+        if (isEnrolledInCourse) {
+          // Sync: add to StudentCourses
+          enrolled = true;
+
+          if (!studentCourses) {
+            const newStudentCourses = new StudentCourses({
+              userId: studentId.toString(),
+              courses: [{
+                courseId: courseId,
+                title: course.title,
+                instructorId: course.instructorId,
+                instructorName: course.instructorName,
+                dateOfPurchase: new Date(),
+                courseImage: course.image,
+              }]
+            });
+            await newStudentCourses.save();
+          } else {
+            studentCourses.courses.push({
+              courseId: courseId,
+              title: course.title,
+              instructorId: course.instructorId,
+              instructorName: course.instructorName,
+              dateOfPurchase: new Date(),
+              courseImage: course.image,
+            });
+            await studentCourses.save();
+          }
+        }
+      }
+    }
+
+    if (!enrolled) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Course not purchased.",
@@ -63,6 +103,8 @@ const getQuizzesByCourse = async (req, res) => {
     });
 
     // Get quizzes for the course with populated attempts using aggregation to avoid N+1
+    console.log("DEBUG: Running aggregation for courseId:", courseId, "studentId:", studentId);
+
     const quizzesWithAttempts = await Quiz.aggregate([
       {
         $match: {
@@ -130,6 +172,8 @@ const getQuizzesByCourse = async (req, res) => {
       },
     ]);
 
+    console.log("DEBUG: Aggregation completed, found", quizzesWithAttempts.length, "quizzes");
+
     // Filter quizzes based on prerequisites
     const availableQuizzes = quizzesWithAttempts.filter((quiz) => {
       if (
@@ -156,6 +200,8 @@ const getQuizzesByCourse = async (req, res) => {
     });
   } catch (e) {
     console.error("Error getting quizzes by course:", e);
+    console.error("Error details:", e.message);
+    console.error("Stack trace:", e.stack);
     res.status(500).json({
       success: false,
       message: "Failed to retrieve quizzes. Please try again.",

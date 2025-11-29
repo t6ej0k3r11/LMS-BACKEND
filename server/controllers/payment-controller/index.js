@@ -128,7 +128,7 @@ const initOnlinePayment = async (req, res) => {
     const existingPayment = await Payment.findOne({
       userId,
       courseId,
-      paymentStatus: { $in: [PAYMENT_CONFIG.STATUSES.PENDING, PAYMENT_CONFIG.STATUSES.PROCESSING] },
+      [PAYMENT_CONFIG.FIELDS.STATUS]: { $in: [PAYMENT_CONFIG.STATUSES.PENDING, PAYMENT_CONFIG.STATUSES.PROCESSING] },
     });
 
     if (existingPayment) {
@@ -144,6 +144,41 @@ const initOnlinePayment = async (req, res) => {
     );
 
     if (isEnrolled) {
+      // Check if also in StudentCourses, if not, add it to sync
+      const studentCourses = await StudentCourses.findOne({ userId: userId.toString() });
+      const courseExistsInStudentCourses = studentCourses?.courses?.some(
+        (c) => c.courseId === courseId.toString()
+      );
+
+      if (!courseExistsInStudentCourses) {
+        // Sync: add to StudentCourses
+        if (!studentCourses) {
+          const newStudentCourses = new StudentCourses({
+            userId: userId.toString(),
+            courses: [{
+              courseId: courseId.toString(),
+              title: course.title,
+              instructorId: course.instructorId,
+              instructorName: course.instructorName,
+              dateOfPurchase: new Date(),
+              courseImage: course.image,
+            }]
+          });
+          await newStudentCourses.save();
+        } else {
+          studentCourses.courses.push({
+            courseId: courseId.toString(),
+            title: course.title,
+            instructorId: course.instructorId,
+            instructorName: course.instructorName,
+            dateOfPurchase: new Date(),
+            courseImage: course.image,
+          });
+          await studentCourses.save();
+        }
+        console.log("Synced enrollment: added course to StudentCourses");
+      }
+
       return res.status(400).json({
         [PAYMENT_CONFIG.RESPONSE_FORMAT.SUCCESS]: false,
         [PAYMENT_CONFIG.RESPONSE_FORMAT.MESSAGE]: "You are already enrolled in this course",
@@ -286,8 +321,20 @@ const handlePaymentCancel = async (req, res) => {
 
 // Submit offline payment with proof
 const submitOfflinePayment = async (req, res) => {
+  console.log("DEBUG: submitOfflinePayment called");
+  console.log("DEBUG: Request body:", req.body);
+  console.log("DEBUG: Request file:", req.file);
+  console.log("DEBUG: User ID:", req.user._id);
+  
   const { courseId, method, amount, transactionId, referenceNote } = req.body;
   const userId = req.user._id;
+
+  console.log("DEBUG: Parsed values:");
+  console.log("DEBUG: courseId:", courseId, "type:", typeof courseId);
+  console.log("DEBUG: method:", method, "type:", typeof method);
+  console.log("DEBUG: amount:", amount, "type:", typeof amount);
+  console.log("DEBUG: transactionId:", transactionId, "type:", typeof transactionId);
+  console.log("DEBUG: referenceNote:", referenceNote, "type:", typeof referenceNote);
 
   if (!courseId || !method || !amount) {
     return res.status(400).json({
@@ -332,6 +379,41 @@ const submitOfflinePayment = async (req, res) => {
     );
 
     if (isEnrolled) {
+      // Check if also in StudentCourses, if not, add it to sync
+      const studentCourses = await StudentCourses.findOne({ userId: userId.toString() });
+      const courseExistsInStudentCourses = studentCourses?.courses?.some(
+        (c) => c.courseId === courseId.toString()
+      );
+
+      if (!courseExistsInStudentCourses) {
+        // Sync: add to StudentCourses
+        if (!studentCourses) {
+          const newStudentCourses = new StudentCourses({
+            userId: userId.toString(),
+            courses: [{
+              courseId: courseId.toString(),
+              title: course.title,
+              instructorId: course.instructorId,
+              instructorName: course.instructorName,
+              dateOfPurchase: new Date(),
+              courseImage: course.image,
+            }]
+          });
+          await newStudentCourses.save();
+        } else {
+          studentCourses.courses.push({
+            courseId: courseId.toString(),
+            title: course.title,
+            instructorId: course.instructorId,
+            instructorName: course.instructorName,
+            dateOfPurchase: new Date(),
+            courseImage: course.image,
+          });
+          await studentCourses.save();
+        }
+        console.log("Synced enrollment: added course to StudentCourses");
+      }
+
       return res.status(400).json({
         [PAYMENT_CONFIG.RESPONSE_FORMAT.SUCCESS]: false,
         [PAYMENT_CONFIG.RESPONSE_FORMAT.MESSAGE]: "You are already enrolled in this course",

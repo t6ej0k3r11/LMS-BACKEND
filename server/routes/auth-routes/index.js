@@ -8,7 +8,7 @@ const {
   resetPassword,
   checkAuth,
 } = require("../../controllers/auth-controller/index");
-const authenticateMiddleware = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const {
   validateRegistration,
   validateLogin,
@@ -32,6 +32,6 @@ router.post(
 router.post("/reset-password", validatePasswordReset, resetPassword);
 
 // Check authentication status
-router.get("/check-auth", authenticateMiddleware.authenticate, checkAuth);
+router.get("/check-auth", authenticate, checkAuth);
 
 module.exports = router;

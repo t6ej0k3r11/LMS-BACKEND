@@ -1,21 +1,20 @@
 const request = require("supertest");
+const mongoose = require("mongoose");
 
 // Import your app - adjust path as needed
 const app = require("../../server");
 
 describe("Authentication Flow Integration Tests", () => {
-  let server;
   let agent;
 
   beforeAll(async () => {
-    // Start the server
-    server = app.listen(5001);
-    agent = request.agent(server);
+    // Use the server started by globalSetup
+    const testPort = global.__TESTPORT__;
+    agent = request.agent(`http://localhost:${testPort}`);
   });
 
   afterAll(async () => {
-    // Close server
-    server.close();
+    // Server is closed by globalTeardown
   });
 
   beforeEach(async () => {

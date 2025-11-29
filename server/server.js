@@ -27,6 +27,7 @@ const studentViewCourseRoutes = require("./routes/student-routes/course-routes")
 const studentViewOrderRoutes = require("./routes/student-routes/order-routes");
 const studentCoursesRoutes = require("./routes/student-routes/student-courses-routes");
 const studentCourseProgressRoutes = require("./routes/student-routes/course-progress-routes");
+const studentDetailedProgressRoutes = require("./routes/student-routes/detailed-progress-routes");
 const studentQuizRoutes = require("./routes/student-routes/quiz-routes");
 const profileRoutes = require("./routes/profile-routes/index");
 const settingsRoutes = require("./routes/settings-routes/index");
@@ -110,9 +111,19 @@ app.use("/student/course", studentViewCourseRoutes);
 app.use("/api/orders", studentViewOrderRoutes);
 app.use("/student/courses-bought", studentCoursesRoutes);
 app.use("/student/course-progress", studentCourseProgressRoutes);
+app.use("/api/progress", studentDetailedProgressRoutes);
 app.use("/student/quiz", studentQuizRoutes);
 app.use("/profile", profileRoutes);
 app.use("/api/settings", settingsRoutes);
+
+// Debug endpoint to check validation logs
+app.get("/api/debug/logs", (req, res) => {
+  res.json({
+    message: "Debug endpoint working",
+    timestamp: new Date().toISOString(),
+    paymentRoutes: "Loaded",
+  });
+});
 
 // Serve uploaded files statically
 app.use("/uploads", express.static("uploads"));

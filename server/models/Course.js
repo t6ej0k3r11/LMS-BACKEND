@@ -16,7 +16,11 @@ const LectureSchema = new mongoose.Schema({
 });
 
 const CourseSchema = new mongoose.Schema({
-  instructorId: String,
+  instructorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
   instructorName: String,
   date: Date,
   title: String,

@@ -1,11 +1,11 @@
 const express = require("express");
 const User = require("../models/User");
-const authenticateMiddleware = require("../middleware/auth-middleware");
+const { authenticate } = require("../middleware/auth-middleware");
 
 const router = express.Router();
 
 // All message routes require authentication
-router.use(authenticateMiddleware.authenticate);
+router.use(authenticate);
 
 /**
  * Get chat partners based on user role

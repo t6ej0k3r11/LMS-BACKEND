@@ -7,11 +7,11 @@ const {
   deleteUserNotification,
   createUserNotification,
 } = require("../../controllers/notification-controller/index");
-const authenticateMiddleware = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const router = express.Router();
 
 // All notification routes require authentication
-router.use(authenticateMiddleware.authenticate);
+router.use(authenticate);
 
 // Get user notifications
 router.get("/", getNotifications);

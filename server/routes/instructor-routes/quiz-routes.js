@@ -10,7 +10,7 @@ const {
   getUnreviewedAnswers,
   getQuestionsForInstructors,
 } = require("../../controllers/instructor-controller/quiz-controller");
-const authenticate = require("../../middleware/auth-middleware");
+const { authenticate } = require("../../middleware/auth-middleware");
 const {
   checkInstructorApproved,
 } = require("../../middleware/instructor-middleware");
@@ -21,7 +21,7 @@ const {
 const router = express.Router();
 
 // Apply authentication middleware to all routes
-router.use(authenticate.authenticate);
+router.use(authenticate);
 // Apply instructor approval check to all routes (requires approved instructor)
 router.use(checkInstructorApproved);
 
