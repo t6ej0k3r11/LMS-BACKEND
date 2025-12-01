@@ -200,7 +200,7 @@ const getQuizById = async (req, res) => {
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId.toString(),
-      "courses.courseId": quiz.courseId,
+      "courses.courseId": quiz.courseId.toString(),
     });
 
     if (!studentCourses) {
@@ -246,7 +246,7 @@ const getQuizById = async (req, res) => {
         // Fetch bank question data
         const bankQuestion = await QuestionBank.findById(q.bankQuestionId);
         if (bankQuestion) {
-          processedQuestions.push({
+          const questionData = {
             _id: q._id,
             mode: "bank",
             bankQuestionId: q.bankQuestionId,
@@ -257,7 +257,13 @@ const getQuizById = async (req, res) => {
             subject: bankQuestion.subject,
             difficulty: bankQuestion.difficulty,
             tags: bankQuestion.tags,
-          });
+          };
+
+          // Include correct answer and explanation for practice mode feedback
+          questionData.correctAnswer = bankQuestion.correctAnswer;
+          questionData.explanation = bankQuestion.explanation;
+
+          processedQuestions.push(questionData);
         } else {
           // Bank question not found, skip or add placeholder
           console.warn(
@@ -266,14 +272,20 @@ const getQuizById = async (req, res) => {
         }
       } else {
         // Custom question
-        processedQuestions.push({
+        const questionData = {
           _id: q._id,
           mode: "custom",
           type: q.type,
           question: q.question,
           options: q.options,
           points: q.points,
-        });
+        };
+
+        // Include correct answer and explanation for practice mode feedback
+        questionData.correctAnswer = q.correctAnswer;
+        questionData.explanation = q.explanation;
+
+        processedQuestions.push(questionData);
       }
     }
 
@@ -357,7 +369,7 @@ const startQuizAttempt = async (req, res) => {
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId.toString(),
-      "courses.courseId": quiz.courseId,
+      "courses.courseId": quiz.courseId.toString(),
     });
 
     if (!studentCourses) {
@@ -528,7 +540,7 @@ const submitQuizAttempt = async (req, res) => {
     }
 
     const courseIndex = studentCourses.courses.findIndex(
-      (item) => item.courseId === quiz.courseId
+      (item) => item.courseId === quiz.courseId.toString()
     );
 
     if (courseIndex === -1) {
@@ -620,6 +632,31 @@ const submitQuizAttempt = async (req, res) => {
           // Broad text questions need manual review - no points until reviewed
           isCorrect = null;
           points = 0;
+        } else if (questionType === "multiple-select") {
+          // Handle multiple-select questions
+          let correctAnswers = correctAnswer;
+          if (typeof correctAnswer === 'string') {
+            try {
+              correctAnswers = JSON.parse(correctAnswer);
+            } catch {
+              correctAnswers = correctAnswer.split(',').map(s => s.trim());
+            }
+          }
+
+          if (Array.isArray(answer.answer) && Array.isArray(correctAnswers)) {
+            const correctSelected = answer.answer.filter(a => correctAnswers.includes(a)).length;
+            const incorrectSelected = answer.answer.filter(a => !correctAnswers.includes(a)).length;
+            const totalCorrect = correctAnswers.length;
+            const totalOptions = question.options?.length || 1;
+
+            const partialCredit = Math.max(0, (correctSelected / totalCorrect) - (incorrectSelected / totalOptions));
+            points = Math.round(partialCredit * (question.points || 1));
+            isCorrect = partialCredit === 1;
+            pointsEarned += points;
+          } else {
+            isCorrect = false;
+            points = 0;
+          }
         } else {
           // Automatic marking for multiple choice, true-false, etc.
           isCorrect = correctAnswer === answer.answer;
@@ -742,7 +779,7 @@ const validateQuizAccess = async (req, res) => {
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId,
-      "courses.courseId": quiz.courseId,
+      "courses.courseId": quiz.courseId.toString(),
     });
 
     if (!studentCourses) {
@@ -882,7 +919,7 @@ const getQuizResults = async (req, res) => {
     }
 
     const courseIndex = studentCourses.courses.findIndex(
-      (item) => item.courseId === quiz.courseId
+      (item) => item.courseId === quiz.courseId.toString()
     );
 
     if (courseIndex === -1) {
@@ -1033,7 +1070,7 @@ const submitQuestionAnswer = async (req, res) => {
     }
 
     const courseIndex = studentCourses.courses.findIndex(
-      (item) => item.courseId === quiz.courseId
+      (item) => item.courseId === quiz.courseId.toString()
     );
 
     if (courseIndex === -1) {
@@ -1124,6 +1161,30 @@ const submitQuestionAnswer = async (req, res) => {
       // Broad text questions need manual review
       isCorrect = null;
       pointsEarned = 0;
+    } else if (questionType === "multiple-select") {
+      // Handle multiple-select questions
+      let correctAnswers = correctAnswer;
+      if (typeof correctAnswer === 'string') {
+        try {
+          correctAnswers = JSON.parse(correctAnswer);
+        } catch {
+          correctAnswers = correctAnswer.split(',').map(s => s.trim());
+        }
+      }
+
+      if (Array.isArray(answer) && Array.isArray(correctAnswers)) {
+        const correctSelected = answer.filter(a => correctAnswers.includes(a)).length;
+        const incorrectSelected = answer.filter(a => !correctAnswers.includes(a)).length;
+        const totalCorrect = correctAnswers.length;
+        const totalOptions = question.options?.length || 1;
+
+        const partialCredit = Math.max(0, (correctSelected / totalCorrect) - (incorrectSelected / totalOptions));
+        pointsEarned = Math.round(partialCredit * (question.points || 1));
+        isCorrect = partialCredit === 1;
+      } else {
+        isCorrect = false;
+        pointsEarned = 0;
+      }
     } else {
       // Automatic marking for multiple choice, true-false, etc.
       isCorrect = correctAnswer === answer;
@@ -1225,7 +1286,7 @@ const finalizeQuizAttempt = async (req, res) => {
     // Check if student has purchased the course
     const studentCourses = await StudentCourses.findOne({
       userId: studentId.toString(),
-      "courses.courseId": quiz.courseId,
+      "courses.courseId": quiz.courseId.toString(),
     });
 
     if (!studentCourses) {

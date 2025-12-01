@@ -77,6 +77,34 @@ const validateCourseCreation = [
     .isIn(["beginner", "intermediate", "advanced"])
     .withMessage("Level must be beginner, intermediate, or advanced"),
 
+  body("primaryLanguage").trim().notEmpty().withMessage("Primary language is required"),
+
+  body("courseType").trim().notEmpty().withMessage("Course type is required"),
+
+  body("subtitle").trim().notEmpty().withMessage("Course subtitle is required"),
+
+  body("objectives").trim().notEmpty().withMessage("Course objectives are required"),
+
+  body("welcomeMessage").trim().notEmpty().withMessage("Welcome message is required"),
+
+  body("curriculum")
+    .isArray({ min: 1 })
+    .withMessage("At least one lesson is required in curriculum"),
+
+  body("curriculum.*.title").trim().notEmpty().withMessage("Lesson title is required"),
+
+  body("curriculum.*.videoUrl").trim().notEmpty().withMessage("Lesson video URL is required"),
+
+  body("curriculum.*.public_id").trim().notEmpty().withMessage("Lesson video file is required"),
+
+  body("curriculum").custom((curriculum) => {
+    const hasFreePreview = curriculum.some(lesson => lesson.freePreview === true);
+    if (!hasFreePreview) {
+      throw new Error("At least one lesson must have free preview enabled");
+    }
+    return true;
+  }),
+
   body("pricing")
     .optional({ nullable: true })
     .isFloat({ min: 0 })
